@@ -35,7 +35,7 @@ AI Websites & Tools：https://www.toolify.ai/
     - 从别人那买：<img width="242" alt="image" src="https://github.com/guozheng07/AI/assets/42236890/569ed08e-f535-4dcb-b37d-91b1a45f59ce">
     - 充值为 ChatGPT Pro：三种方法充值 ChatGPT，可以根据这个文档提示，一步一步操作：https://pl738lhmx6.feishu.cn/docx/JaGRdiTCBoRBjvxVbcpcVuzknAg
 
-三、GPTs
+三、GPTs  
 GPTs 其实就是 ChatGPT 的自定义版本，不需要编码能力就可以使用了。
 
 自定义方式最重要的四个模块，也是 OpenAI 基于 GPT 开发出来的  4 种外部工程技巧，创建者可控的部分：
