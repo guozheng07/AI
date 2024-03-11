@@ -46,9 +46,9 @@ GPTs 其实就是 ChatGPT 的自定义版本，不需要编码能力就可以使
 
 # 3.11 日（周一）：写出好用的 Prompt 其实很简单
 ## 指南
-📚 课程文档：https://xhkzr.xetlk.com/s/25S4S1
-📺 直播地址：https://xhkzr.xetlk.com/sl/4vaXcu
-📄 作业地址：https://xhkzr.xetlk.com/s/1dSUrE
+📚 课程文档：https://xhkzr.xetlk.com/s/25S4S1  
+📺 直播地址：https://xhkzr.xetlk.com/sl/4vaXcu  
+📄 作业地址：https://xhkzr.xetlk.com/s/1dSUrE  
 👧 本日教练：Micky（早早聊社区负责人）
 ## 笔记
 # 3.12 日（周二）：大厂裸辞后，我的 8 年 IP 打造实战
