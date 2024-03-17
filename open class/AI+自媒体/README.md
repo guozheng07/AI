@@ -52,7 +52,16 @@ GPTs 其实就是 ChatGPT 的自定义版本，不需要编码能力就可以使
 👧 本日教练：Micky（早早聊社区负责人）
 ## 笔记
 # 3.12 日（周二）：大厂裸辞后，我的 8 年 IP 打造实战
+📚 课程文档：https://xhkzr.xetlk.com/s/2sqAGl  
+📺 直播地址：https://xhkzr.xetlk.com/sl/1L7C13  
+📄作业地址：https://xhkzr.xetlk.com/s/1k7yik  
 # 3.14 日（周四）：AI 如何赋能个人 IP
+📚 课程文档：https://xhkzr.xetslk.com/s/1qyfmc  
+📺 直播地址：https://xhkzr.xetlk.com/sl/17Z0qf  
+📄作业地址：https://xhkzr.xetlk.com/s/1k7yik  
 # 3.17 日（周日）：用 AI 蹭热点、搞流量
+📚 课程文档：https://xhkzr.xetslk.com/s/1qyfmc  
+📺 直播地址：https://xhkzr.xetlk.com/sl/38Hh3P  
+📄作业地址：https://xhkzr.xetlk.com/s/1o8d12  
 # 3.19 日（周二）：小白也能轻松写出爆款文案
 # 3.23 日（周六）：即学即用，步入 AI 搞钱之旅
