@@ -61,6 +61,11 @@ GPTs 其实就是 ChatGPT 的自定义版本，不需要编码能力就可以使
 📚 课程文档：https://xhkzr.xetslk.com/s/1qyfmc  
 📺 直播地址：https://xhkzr.xetlk.com/sl/17Z0qf  
 📄作业地址：https://xhkzr.xetlk.com/s/1k7yik  
+
+IP 可以通过以下方式做测试喔：  
+1. GPTs：https://chat.openai.com/g/g-UtcyzeeNf-ai-zao-zao-liao-ip-ding-wei-qi
+2. Coze：https://ciciai.com/bot/s5Vrwf43（如果以上方法都用不了，可以从今天课程文档中找到 Prompt，自己找一个工具哈）
+
 # 3.17 日（周日）：用 AI 蹭热点、搞流量
 ## 指南
 📚 课程文档：https://xhkzr.xetslk.com/s/1qyfmc  
