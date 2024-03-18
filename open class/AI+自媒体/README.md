@@ -6,8 +6,6 @@
 📄 作业地址：https://xhkzr.xetlk.com/s/3zZ917  
 👧 本日教练：Micky，早早聊社区负责人
 ## 笔记
-AI Websites & Tools：https://www.toolify.ai/
-
 一、科学上网  
 - 自建：https://www.tizidajian.com/
 - 购买
