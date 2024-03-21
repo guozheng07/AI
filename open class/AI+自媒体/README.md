@@ -70,9 +70,15 @@ IP 可以通过以下方式做测试喔：
 📺 直播地址：https://xhkzr.xetlk.com/sl/38Hh3P  
 📄作业地址：https://xhkzr.xetlk.com/s/1o8d12  
 # 3.19 日（周二）：小白也能轻松写出爆款文案
+📺 直播地址：https://xhkzr.xetlk.com/sl/39CZu6  
+📚 课程文档：https://xhkzr.xetslk.com/s/3fYw3k  
+📄 作业地址：https://xhkzr.xetlk.com/s/3K7sOv  
+👧 本日教练：淑琬（AI 早早聊圈子负责人，12 年大厂用户运营）
 # 3.20 日（周三）：加餐 提示工程基础入门
 📚 课程文档：https://xhkzr.xetslk.com/s/2pF7Rs
 📺 直播地址：https://xhkzr.xetslk.com/sl/UiiM9
 📄 作业地址：https://xhkzr.xetslk.com/s/3q4ugT
 👧 本日教练：Micky，早早聊社区负责人
 # 3.23 日（周六）：即学即用，步入 AI 搞钱之旅
+📺 直播地址：https://xhkzr.xetlk.com/sl/69hOS  
+本日教练：圆桌点评
