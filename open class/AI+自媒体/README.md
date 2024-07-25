@@ -17,16 +17,16 @@
 
 二、AI 工具  
 - 工具选型（公司-工具-科学上网-收费情况）
-  - OpenAI- https://chat.openai.com/-需要-GPT-3.5（免费）、GPT-4（付费）
-  - 字节-https://www.coze.com/-需要-GPT-4 turbo（128K）（免费）、GPT-4（8K）（免费）、GPT-3.5（16K）（免费）
-  - 月之暗面-https://kimi.moonshot.cn/-不需要-Moonshot（免费）
-  - Anthropic-https://claude.ai/-不需要，但是需要海外手机号（可以用接码平台）-Sonnet（免费）、Opus（付费）
-  - 字节-https://www.coze.cn/-不需要-云雀语言模型（免费）
-  - 科大讯飞-https://xinghuo.xfyun.cn/-不需要-星火大模型（有 tokens 赠送）
-  - 智谱 AI-https://open.bigmodel.cn/-不需要-GLM-4（有 tokens 赠送）
-  - 百度-https://yiyan.baidu.com/-不需要-文心大模型 3.5（免费）、文心大模型 4.0（付费）
-  - 阿里-https://tongyi.aliyun.com/qianwen/-不需要-通义大模型设（免费）
-  - /-https://huggingface.co/chat/-需要-开源模型可自选
+  - OpenAI- https://chat.openai.com/ -需要-GPT-3.5（免费）、GPT-4（付费）
+  - 字节-https://www.coze.com/ -需要-GPT-4 turbo（128K）（免费）、GPT-4（8K）（免费）、GPT-3.5（16K）（免费）
+  - 月之暗面-https://kimi.moonshot.cn/ -不需要-Moonshot（免费）
+  - Anthropic-https://claude.ai/ -不需要，但是需要海外手机号（可以用接码平台）-Sonnet（免费）、Opus（付费）
+  - 字节-https://www.coze.cn/ -不需要-云雀语言模型（免费）
+  - 科大讯飞-https://xinghuo.xfyun.cn/ -不需要-星火大模型（有 tokens 赠送）
+  - 智谱 AI-https://open.bigmodel.cn/ -不需要-GLM-4（有 tokens 赠送）
+  - 百度-https://yiyan.baidu.com/ -不需要-文心大模型 3.5（免费）、文心大模型 4.0（付费）
+  - 阿里-https://tongyi.aliyun.com/qianwen/ -不需要-通义大模型设（免费）
+  - /-https://huggingface.co/chat/ -需要-开源模型可自选
 - ChatGPT 账号注册与充值
   - 账号注册：https://chat.openai.com/auth/login，注册后可以直接使用  ChatGPT 3.5，是免费的。
   - 购买账号
