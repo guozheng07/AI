@@ -8,3 +8,5 @@ AI Websites & Tools：https://www.toolify.ai/
 4. Canva，做做海报
 5. Gemma，PPT
 6. Zapier，搭配 ChatGPT 执行一些自动化任务
+
+AI 工具大盘点 👉 https://shorturl.at/CzJgD
