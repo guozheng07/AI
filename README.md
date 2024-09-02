@@ -10,3 +10,7 @@ AI Websites & Tools：https://www.toolify.ai/
 6. Zapier，搭配 ChatGPT 执行一些自动化任务
 
 AI 工具大盘点 👉 https://shorturl.at/CzJgD
+
+# AI资讯
+- [早早聊](https://zaozaoliao.feishu.cn/wiki/IaUSwhYZ0iVz3wkIkoCciyRan4c)
+- [AutoGpt](https://autogpt.net/)
