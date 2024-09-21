@@ -14,3 +14,4 @@ AI 工具大盘点 👉 https://shorturl.at/CzJgD
 # AI资讯
 - [早早聊](https://zaozaoliao.feishu.cn/wiki/IaUSwhYZ0iVz3wkIkoCciyRan4c)
 - [AutoGpt](https://autogpt.net/)
+- [极客时间知识库](https://gp477l8icq.feishu.cn/wiki/JUXnwzSuviL5E9kh6jUc8FRinHe?ignore_wx_jump=1)
