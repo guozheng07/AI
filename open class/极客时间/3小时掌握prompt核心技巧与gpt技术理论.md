@@ -1,7 +1,7 @@
 # GPT 模型实战：技巧与原则
 ![image](https://github.com/user-attachments/assets/6f70d572-8d92-4af3-b4b7-dd591ab77e3f)
 
-# AI 大模型应用最佳实践
+# 快速掌握 Prompt 工程核心技巧
 GPT 模型实战：Official Playground
 
 - **针对长内容生成，system message 很有用，其中的内容可以被全局记住**，而不需要在对话的上下文中记忆，从而节省大量tokens。
@@ -12,7 +12,5 @@ GPT 模型实战：Official Playground
 
 - 通过指定格式构造标注数据
 ![image](https://github.com/user-attachments/assets/bdd6f1b8-adde-4e77-a8d9-cca04d51b203)
-
-# 快速掌握 Prompt 工程核心技巧
 
 # GPT 技术理论贯通
