@@ -11,6 +11,8 @@ AI Websites & Tools：https://www.toolify.ai/
 
 AI 工具大盘点 👉 https://shorturl.at/CzJgD
 
+prompt 优化：https://promptperfect.jina.ai/interactive
+
 # AI资讯&知识库
 - [早早聊-资讯](https://zaozaoliao.feishu.cn/wiki/IaUSwhYZ0iVz3wkIkoCciyRan4c)
 - [AutoGpt-文章](https://autogpt.net/)
