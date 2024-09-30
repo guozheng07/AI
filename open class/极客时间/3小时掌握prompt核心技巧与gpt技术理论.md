@@ -14,3 +14,17 @@ GPT 模型实战：Official Playground
 ![image](https://github.com/user-attachments/assets/bdd6f1b8-adde-4e77-a8d9-cca04d51b203)
 
 # GPT 技术理论贯通
+1.NLP 语言模型技术发展一览
+
+![image](https://github.com/user-attachments/assets/750e9c27-252b-42ea-ae49-ac419b2ad789)
+
+2.预训练语言模型
+
+![image](https://github.com/user-attachments/assets/725cbafb-dc7b-4f91-b9b3-75473d5b7ad9)
+
+3.预训练语言模型的三种网络架构（2018～2020）
+
+![image](https://github.com/user-attachments/assets/1e323f2d-faa0-4670-9e2e-dffcf2850b20)
+
+![image](https://github.com/user-attachments/assets/b15f445e-2993-4238-9617-bf3dabfc4ba5)
+
