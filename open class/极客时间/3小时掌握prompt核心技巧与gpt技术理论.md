@@ -92,3 +92,10 @@ few-shot/一些示例一般在3～10个之间。
 ![image](https://github.com/user-attachments/assets/64cc57b6-eb78-4ada-8391-1d05325b0cdd)
 
 ![image](https://github.com/user-attachments/assets/67462622-63f7-4f80-9235-c4368faeea59)
+
+7.相关论文
+
+- [《Improving Language Understanding
+by Generative Pre-Training》](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf)
+- [《Language Models are Unsupervised Multitask Learners》](https://paperswithcode.com/paper/language-models-are-unsupervised-multitask)
+- [《Language Models are Few-Shot Learners》](https://arxiv.org/abs/2005.14165)
