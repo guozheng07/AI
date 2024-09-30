@@ -28,3 +28,29 @@ GPT 模型实战：Official Playground
 
 ![image](https://github.com/user-attachments/assets/b15f445e-2993-4238-9617-bf3dabfc4ba5)
 
+4.语言模型进展
+- ELMo：两个方向训练单项模型，最后拼接在一起。
+
+![image](https://github.com/user-attachments/assets/07d51e59-12d6-49eb-920f-c18236e2b142)
+
+- GPT-1：将 transformer 的解码器拿出来，层数从6加到12，忽略了编码器的输入，把中间的 attention 去掉，在此基础上对不同的下游任务做微调。**需要改模型。**
+
+![image](https://github.com/user-attachments/assets/a869f609-7919-4ea6-bb1d-ff0c51a264ef)
+
+![image](https://github.com/user-attachments/assets/1f7558f2-b1bb-4d6f-ba75-dcb5cc398b33)
+
+![image](https://github.com/user-attachments/assets/1237a96f-e98e-4eda-820a-29c73e0f2db1)
+
+- GPT2：相比 GPT-1，扩大了训练集和参数，并改变了思路，不再是训练好大模型，再为多种下游任务做微调，而是把两件事合二为一，训练一个大模型，天然支持多种下游任务，为 prompt learning 埋下了种子。**不需要更改模型。**
+
+- GPT3：相比 GPT-2，进一步扩大数据集（例如 Common Crawl/网络爬虫数据集），并进行上下文学习/In-context learning（替换梯度下降）。**模型更大，给出示例，进行上下文学习。**
+
+![image](https://github.com/user-attachments/assets/c8395b1e-aa78-473d-8909-0f50eb103e96)
+
+![image](https://github.com/user-attachments/assets/c4101e9e-c0bf-4d60-ab02-b30991d7ee24)
+
+2020年半监督序列学习总结
+
+![image](https://github.com/user-attachments/assets/f2f482bf-0a5d-45fc-9225-4bd3b57efaaa)
+
+
