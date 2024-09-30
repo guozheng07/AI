@@ -95,7 +95,13 @@ few-shot/一些示例一般在3～10个之间。
 
 7.相关论文
 
+GPT3：
 - [《Improving Language Understanding
 by Generative Pre-Training》](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf)
 - [《Language Models are Unsupervised Multitask Learners》](https://paperswithcode.com/paper/language-models-are-unsupervised-multitask)
 - [《Language Models are Few-Shot Learners》](https://arxiv.org/abs/2005.14165)
+
+GPT4：
+- [《Sparks of Artificial General Intelligence: Early experiments with GPT-4》](https://arxiv.org/abs/2303.12712)
+- [《GPTs are GPTs: An Early Look at the Labor Market Impact Potential of Large Language Models》](https://arxiv.org/abs/2303.10130)
+- [《GPT-4 Architecture, Infrastructure, Training Dataset, Costs, Vision, MoE》](https://www.semianalysis.com/p/gpt-4-architecture-infrastructure)
