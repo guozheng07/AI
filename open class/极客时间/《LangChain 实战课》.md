@@ -910,8 +910,542 @@ print(prompt.format(flower_type="红玫瑰", occasion="爱情"))
 ![image](https://github.com/user-attachments/assets/994741be-56dc-4c94-a0cf-05bcc167b880)
 
 # 基础篇（11讲）05｜提示工程（下）：用思维链和思维树提升模型思考质量
+## 什么是 Chain of Thought
+CoT 这个概念来源于学术界，是谷歌大脑的 Jason Wei 等人于 2022 年在论文《Chain-of-Thought Prompting Elicits Reasoning in Large Language Models（自我一致性提升了语言模型中的思维链推理能力）》中提出来的概念。它提出，如果生成一系列的中间推理步骤，就能够显著提高大型语言模型进行复杂推理的能力。
+
+### Few-Shot CoT
+![image](https://github.com/user-attachments/assets/8542c55b-8b13-4edc-a992-8a28ec912ecb)
+
+![image](https://github.com/user-attachments/assets/2dd59cab-134d-423d-8bb4-62294def72a7)
+
+在这个过程中，整体上，思维链引导 AI 从理解问题，到搜索信息，再到制定决策，最后生成销售列表。这种方法不仅使 AI 的推理过程更加清晰，也使得生成的销售列表更加符合用户的需求。具体到每一个步骤，也可以通过思维链来设计更为详细的提示模板，来引导模型每一步的思考都遵循清晰准确的逻辑。
+
+**其实 LangChain 的核心组件 Agent 的本质就是进行好的提示工程，并大量地使用预置的 FewShot 和 CoT 模板**。这个在之后的课程学习中我们会理解得越来越透彻。
+
+### Zero-Shot CoT
+![image](https://github.com/user-attachments/assets/fe437346-6985-4360-9934-19ef95ef8cd0)
+
+## Chain of Thought 实战
+**项目需求**：在这个示例中，你正在开发一个 AI 运营助手，我们要展示 AI 如何根据用户的需求推理和生成答案。然后，AI 根据当前的用户请求进行推理，提供了具体的花卉建议并解释了为什么选择这些建议。
+
+在这个过程中，AI 需要理解客户的需求之后，按部就班的思考，然后给出最符合逻辑的回答。
+
+### CoT 的模板设计
+![image](https://github.com/user-attachments/assets/f6d2fa91-fb48-40e3-b6fb-5fca0e8174b5)
+
+AI 的模板开始于对其角色的阐述，并给出了一些先前的对话示例（Few-Shot Learning）来帮助 AI 理解如何处理这种类型的请求。这些示例展示了 AI 如何根据思维链进行思考，给出深思熟虑之后的答案。
+
+程序的完整代码如下：
+```
+# 设置环境变量和API密钥
+import os
+os.environ["OPENAI_API_KEY"] = '你的OpenAI API Key'
+
+# 创建聊天模型
+from langchain.chat_models import ChatOpenAI
+llm = ChatOpenAI(temperature=0)
+
+# 设定 AI 的角色和目标
+role_template = "你是一个为花店电商公司工作的AI助手, 你的目标是帮助客户根据他们的喜好做出明智的决定"
+
+# CoT 的关键部分，AI 解释推理过程，并加入一些先前的对话示例（Few-Shot Learning）
+cot_template = """
+作为一个为花店电商公司工作的AI助手，我的目标是帮助客户根据他们的喜好做出明智的决定。 
+
+我会按部就班的思考，先理解客户的需求，然后考虑各种鲜花的涵义，最后根据这个需求，给出我的推荐。
+同时，我也会向客户解释我这样推荐的原因。
+
+示例 1:
+  人类：我想找一种象征爱情的花。
+  AI：首先，我理解你正在寻找一种可以象征爱情的花。在许多文化中，红玫瑰被视为爱情的象征，这是因为它们的红色通常与热情和浓烈的感情联系在一起。因此，考虑到这一点，我会推荐红玫瑰。红玫瑰不仅能够象征爱情，同时也可以传达出强烈的感情，这是你在寻找的。
+
+示例 2:
+  人类：我想要一些独特和奇特的花。
+  AI：从你的需求中，我理解你想要的是独一无二和引人注目的花朵。兰花是一种非常独特并且颜色鲜艳的花，它们在世界上的许多地方都被视为奢侈品和美的象征。因此，我建议你考虑兰花。选择兰花可以满足你对独特和奇特的要求，而且，兰花的美丽和它们所代表的力量和奢侈也可能会吸引你。
+"""
+from langchain.prompts import ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate
+system_prompt_role = SystemMessagePromptTemplate.from_template(role_template)
+system_prompt_cot = SystemMessagePromptTemplate.from_template(cot_template)
+
+# 用户的询问
+human_template = "{human_input}"
+human_prompt = HumanMessagePromptTemplate.from_template(human_template)
+
+# 将以上所有信息结合为一个聊天提示
+chat_prompt = ChatPromptTemplate.from_messages([system_prompt_role, system_prompt_cot, human_prompt])
+
+prompt = chat_prompt.format_prompt(human_input="我想为我的女朋友购买一些花。她喜欢粉色和紫色。你有什么建议吗?").to_messages()
+
+# 接收用户的询问，返回回答结果
+response = llm(prompt)
+print(response)
+```
+
+![image](https://github.com/user-attachments/assets/a46351a7-7e80-4200-b6cf-1096aac6ff61)
+
+## Tree of Thought
+![image](https://github.com/user-attachments/assets/db171bb9-bc82-4fa0-8eea-ed5b371f7339)
+
+ToT 框架为每个任务定义具体的思维步骤和每个步骤的候选项数量。例如，要解决一个数学推理任务，先把它分解为 3 个思维步骤，并为每个步骤提出多个方案，并保留最优的 5 个候选方案。然后在多条思维路径中搜寻最优的解决方案。
+
+这种方法的优势在于，模型可以通过观察和评估其自身的思维过程，更好地解决问题，而不仅仅是基于输入生成输出。这对于需要深度推理的复杂任务非常有用。此外，通过引入强化学习、集束搜索等技术，可以进一步提高搜索策略的性能，并让模型在解决新问题或面临未知情况时有更好的表现。
+
+下面我们应用 ToT 的思想，给出一个鲜花运营方面的示例。
+![image](https://github.com/user-attachments/assets/0770e666-c86d-43e1-a134-08a90322e09d)
+
+这个例子，可以作为 FewShot 示例之一，传递给模型，让他学着实现 ToT。
+
+通过**在具体的步骤中产生多条思考路径**，ToT 框架为解决复杂问题提供了一种新的方法，这种方法结合了语言模型的生成能力、搜索算法以及强化学习，以达到更好的效果。
+
+## 总结
+这节课我们介绍了 Chain of Thought（CoT，即“思维链”）和 Tree of Thoughts（ToT，即“思维树”）这两个非常有趣的概念，并探讨了如何利用它们引导大型语言模型进行更深入的推理。
+- CoT 的核心思想是通过生成一系列中间推理步骤来增强模型的推理能力。在 Few-Shot CoT 和 Zero-Shot CoT 两种应用方法中，前者通过提供链式思考示例传递给模型，后者则直接告诉模型进行要按部就班的推理。
+- ToT 进一步扩展了 CoT 的思想，通过搜索由连贯的语言序列组成的思维树来解决复杂问题。我通过一个鲜花选择的实例，展示了如何在实际应用中使用 ToT 框架。有朋友在 GitHub 上开了一个 [Repo](https://github.com/kyegomez/tree-of-thoughts)，专门给大家介绍 ToT 的应用方法和实例，他们还给出了几个非常简单的通用 ToT 提示语，就像下面这样。
+
+![image](https://github.com/user-attachments/assets/59c1d7bb-77b7-4028-9f5f-fc04b0c5c63b)
+
+## 思考题
+1. 我们的 CoT 实战示例中使用的是 Few-Shot CoT 提示，请你把它换为 Zero-Shot CoT，跑一下程序，看看结果。
+2. 请你设计一个你工作场景中的任务需求，然后用 ToT 让大语言模型帮你解决问题。
+
 # 基础篇（11讲）06｜调用模型：使用OpenAI API还是微调开源Llama2/ChatGLM？
+之前，我们花了两节课的内容讲透了提示工程的原理以及 LangChain 中的具体使用方式。今天，我们来着重讨论 Model I/O 中的第二个子模块，LLM。
+
+![image](https://github.com/user-attachments/assets/b36dac78-2b1a-4d11-8a71-e465ff1fdf69)
+
+## 大语言模型发展史
+![image](https://github.com/user-attachments/assets/6c401447-7c8a-414a-a93f-867bf4c3ca60)
+
+![image](https://github.com/user-attachments/assets/5c3f1a14-fc71-4a10-abaf-1aca1e9f284f)
+
+## 预训练 + 微调的模式
+![image](https://github.com/user-attachments/assets/a8f509e0-ff66-4dc0-a642-6131258d34aa)
+
+图中的“具体任务”，其实也可以更换为“具体领域”。那么总结来说：
+- **预训练**：在大规模无标注文本数据上进行模型的训练，目标是让模型学习自然语言的基础表达、上下文信息和语义知识，为后续任务提供一个通用的、丰富的语言表示基础。
+- **微调**：在预训练模型的基础上，可以根据特定的下游任务对模型进行微调。现在你经常会听到各行各业的人说：我们的优势就是领域知识嘛！我们比不过国内外大模型，我们可以拿开源模型做垂直领域嘛！做垂类模型！—— 啥叫垂类？指的其实就是根据领域数据微调开源模型这件事儿。
+
+![image](https://github.com/user-attachments/assets/55bfe96e-92bd-4870-bc64-1c27c14a96b6)
+
+## 用 HuggingFace 跑开源模型
+### 注册并安装 HuggingFace
+- 第一步，还是要登录 [HuggingFace](https://huggingface.co/) 网站，并拿到专属于你的 Token（https://huggingface.co/settings/tokens，手机上有记录）。
+- 第二步，用 pip install transformers 安装 HuggingFace Library。详见[这里](https://huggingface.co/docs/transformers/installation)。
+- 第三步，在命令行中运行 huggingface-cli login，设置你的 API Token。
+  ![image](https://github.com/user-attachments/assets/f276e127-2545-47e3-b63f-9e57d23c3c8d)
+  当然，也可以在程序中设置你的 API Token，但是这不如在命令行中设置来得安全。
+  ```
+  # 导入HuggingFace API Token
+   import os
+   os.environ['HUGGINGFACEHUB_API_TOKEN'] = '你的HuggingFace API Token'
+  ```
+### 申请使用 Meta 的 Llama2 模型
+在 HuggingFace 的 Model 中，找到 meta-llama/Llama-2-7b。注意，各种各样版本的 Llama2 模型多如牛毛，我们这里用的是最小的 7B 版。此外，还有 13b\70b\chat 版以及各种各样的非 Meta 官方版。
+
+选择 meta-llama/Llama-2-7b 这个模型后，你能够看到这个模型的基本信息。如果你是第一次用 Llama，你需要申请 Access，因为我已经申请过了，所以屏幕中间有句话：“You have been granted access to this model”。从申请到批准，大概是几分钟的事儿。
+
+### 通过 HuggingFace 调用 Llama
+好，万事俱备，现在我们可以使用 HuggingFace 的 Transformers 库来调用 Llama！
+```
+# 导入必要的库
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+# 加载预训练模型的分词器
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+
+# 加载预训练的模型
+# 使用 device_map 参数将模型自动加载到可用的硬件设备上，例如GPU
+model = AutoModelForCausalLM.from_pretrained(
+          "meta-llama/Llama-2-7b-chat-hf", 
+          device_map = 'auto')  
+
+# 定义一个提示，希望模型基于此提示生成故事
+prompt = "请给我讲个玫瑰的爱情故事?"
+
+# 使用分词器将提示转化为模型可以理解的格式，并将其移动到GPU上
+inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+
+# 使用模型生成文本，设置最大生成令牌数为2000
+outputs = model.generate(inputs["input_ids"], max_new_tokens=2000)
+
+# 将生成的令牌解码成文本，并跳过任何特殊的令牌，例如[CLS], [SEP]等
+response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+# 打印生成的响应
+print(response)
+```
+
+这段程序是一个很典型的 HuggingFace 的 Transformers 库的用例，该库提供了大量预训练的模型和相关的工具。
+- 导入 AutoTokenizer：这是一个用于自动加载预训练模型的相关分词器的工具。分词器负责将文本转化为模型可以理解的数字格式。
+- 导入 AutoModelForCausalLM：这是用于加载因果语言模型（用于文本生成）的工具。
+- 使用 from_pretrained 方法来加载预训练的分词器和模型。其中，device_map = 'auto' 是为了自动地将模型加载到可用的设备上，例如 GPU。
+- 然后，给定一个提示（prompt）："请给我讲个玫瑰的爱情故事?"，并使用分词器将该提示转换为模型可以接受的格式，return_tensors="pt" 表示返回 PyTorch 张量。语句中的 .to("cuda") 是 GPU 设备格式转换，因为我在 GPU 上跑程序，不用这个的话会报错，如果你使用 CPU，可以试一下删掉它。
+- 最后使用模型的 .generate() 方法生成响应。max_new_tokens=2000 限制生成的文本的长度。使用分词器的 .decode() 方法将输出的数字转化回文本，并且跳过任何特殊的标记。
+
+因为是在本地进行推理，耗时时间比较久。大概需要 30s～2min 产生结果。
+
+![image](https://github.com/user-attachments/assets/942dfd3e-b66b-4da6-a76a-cf85e87b5314)
+
+## LangChain 和 HuggingFace 的接口
+### 通过 HuggingFace Hub
+第一种集成方式，是通过 HuggingFace Hub。HuggingFace Hub 是一个开源模型中心化存储库，主要用于分享、协作和存储预训练模型、数据集以及相关组件。
+
+我们给出一个 HuggingFace Hub 和 LangChain 集成的代码示例。
+```
+# 导入HuggingFace API Token
+import os
+os.environ['HUGGINGFACEHUB_API_TOKEN'] = '你的HuggingFace API Token'
+
+# 导入必要的库
+from langchain import PromptTemplate, HuggingFaceHub, LLMChain
+
+# 初始化HF LLM
+llm = HuggingFaceHub(
+    repo_id="google/flan-t5-small",
+    #repo_id="meta-llama/Llama-2-7b-chat-hf",
+)
+
+# 创建简单的question-answering提示模板
+template = """Question: {question}
+              Answer: """
+
+# 创建Prompt          
+prompt = PromptTemplate(template=template, input_variables=["question"])
+
+# 调用LLM Chain --- 我们以后会详细讲LLM Chain
+llm_chain = LLMChain(
+    prompt=prompt,
+    llm=llm
+)
+
+# 准备问题
+question = "Rose is which type of flower?"
+
+# 调用模型并返回结果
+print(llm_chain.run(question))
+```
+![image](https://github.com/user-attachments/assets/4514dc30-83c9-42a3-996a-8cef3edac71f)
+
+### 通过 HuggingFace Pipeline
+既然 HuggingFace Hub 还不能完成 Llama-2 的测试，让我们来尝试另外一种方法，HuggingFace Pipeline。HuggingFace 的 Pipeline 是一种高级工具，它简化了多种常见自然语言处理（NLP）任务的使用流程，使得用户不需要深入了解模型细节，也能够很容易地利用预训练模型来做任务。
+
+```
+# 指定预训练模型的名称
+model = "meta-llama/Llama-2-7b-chat-hf"
+
+# 从预训练模型中加载词汇器
+from transformers import AutoTokenizer
+tokenizer = AutoTokenizer.from_pretrained(model)
+
+# 创建一个文本生成的管道
+import transformers
+import torch
+pipeline = transformers.pipeline(
+    "text-generation",
+    model=model,
+    torch_dtype=torch.float16,
+    device_map="auto",
+    max_length = 1000
+)
+
+# 创建HuggingFacePipeline实例
+from langchain import HuggingFacePipeline
+llm = HuggingFacePipeline(pipeline = pipeline, 
+                          model_kwargs = {'temperature':0})
+
+# 定义输入模板，该模板用于生成花束的描述
+template = """
+              为以下的花束生成一个详细且吸引人的描述：
+              花束的详细信息：
+              ```{flower_details}```
+           """
+
+# 使用模板创建提示
+from langchain import PromptTemplate,  LLMChain
+prompt = PromptTemplate(template=template, 
+                     input_variables=["flower_details"])
+
+# 创建LLMChain实例
+from langchain import PromptTemplate
+llm_chain = LLMChain(prompt=prompt, llm=llm)
+
+# 需要生成描述的花束的详细信息
+flower_details = "12支红玫瑰，搭配白色满天星和绿叶，包装在浪漫的红色纸中。"
+
+# 打印生成的花束描述
+print(llm_chain.run(flower_details))
+```
+
+![image](https://github.com/user-attachments/assets/1bf7e5b3-9d6a-4a94-bd1b-a5ccf8f7a97b)
+
+至此，通过 HuggingFace 接口调用各种开源模型的尝试成功结束。下面，我们进行最后一个测试，看看 LangChain 到底能否直接调用本地模型。
+
+## 用 LangChain 调用自定义语言模型
+![image](https://github.com/user-attachments/assets/eaee1c5b-e54c-454d-9fa5-7093c6c67455)
+
+让我们先从 HuggingFace 的这里，下载一个 llama-2-7b-chat.ggmlv3.q4_K_S.bin 模型，并保存在本地。
+
+然后，为了使用 llama-2-7b-chat.ggmlv3.q4_K_S.bin 这个模型，你需要安装 pip install llama-cpp-python 这个包。
+
+```
+# 导入需要的库
+from llama_cpp import Llama
+from typing import Optional, List, Mapping, Any
+from langchain.llms.base import LLM
+
+# 模型的名称和路径常量
+MODEL_NAME = 'llama-2-7b-chat.ggmlv3.q4_K_S.bin'
+MODEL_PATH = '/home/huangj/03_Llama/'
+
+# 自定义的LLM类，继承自基础LLM类
+class CustomLLM(LLM):
+    model_name = MODEL_NAME
+
+    # 该方法使用Llama库调用模型生成回复
+    def _call(self, prompt: str, stop: Optional[List[str]] = None) -> str:
+        prompt_length = len(prompt) + 5
+        # 初始化Llama模型，指定模型路径和线程数
+        llm = Llama(model_path=MODEL_PATH+MODEL_NAME, n_threads=4)
+        # 使用Llama模型生成回复
+        response = llm(f"Q: {prompt} A: ", max_tokens=256)
+        
+        # 从返回的回复中提取文本部分
+        output = response['choices'][0]['text'].replace('A: ', '').strip()
+
+        # 返回生成的回复，同时剔除了问题部分和额外字符
+        return output[prompt_length:]
+
+    # 返回模型的标识参数，这里只是返回模型的名称
+    @property
+    def _identifying_params(self) -> Mapping[str, Any]:
+        return {"name_of_model": self.model_name}
+
+    # 返回模型的类型，这里是"custom"
+    @property
+    def _llm_type(self) -> str:
+        return "custom"
+    
+
+# 初始化自定义LLM类
+llm = CustomLLM()
+
+# 使用自定义LLM生成一个回复
+result = llm("昨天有一个客户抱怨他买了花给女朋友之后，两天花就枯了，你说作为客服我应该怎么解释？")
+
+# 打印生成的回复
+print(result)
+```
+
+## 思考题
+![image](https://github.com/user-attachments/assets/de76c51d-aeb4-4aa3-8ce9-9613ca66f73d)
+
 # 基础篇（11讲）07｜输出解析：用OutputParser生成鲜花推荐列表
+今天我要带着你深入研究一下 LangChain 中的输出解析器，并用一个新的解析器——Pydantic 解析器来重构第 4 课中的程序。这节课也是模型 I/O 框架的最后一讲。
+
+## LangChain 中的输出解析器
+输出解析器是**一种专用于处理和构建语言模型响应的类**。一个基本的输出解析器类通常需要实现两个核心方法。
+- get_format_instructions：这个方法需要返回一个字符串，用于指导如何格式化语言模型的输出，告诉它应该如何组织并构建它的回答。
+- parse：这个方法接收一个字符串（也就是语言模型的输出）并将其解析为特定的数据结构或格式。这一步通常用于确保模型的输出符合我们的预期，并且能够以我们需要的形式进行后续处理。
+
+还有一个可选的方法。
+
+- parse_with_prompt：这个方法接收一个字符串（也就是语言模型的输出）和一个提示（用于生成这个输出的提示），并将其解析为特定的数据结构。这样，你可以根据原始提示来修正或重新解析模型的输出，确保输出的信息更加准确和贴合要求。
+
+在 LangChain 中，通过实现 get_format_instructions、parse 和 parse_with_prompt 这些方法，针对不同的使用场景和目标，设计了各种输出解析器。让我们来逐一认识一下。
+1. 列表解析器（List Parser）：这个解析器用于处理模型生成的输出，当需要模型的输出是一个列表的时候使用。例如，如果你询问模型“列出所有鲜花的库存”，模型的回答应该是一个列表。
+2. 日期时间解析器（Datetime Parser）：这个解析器用于处理日期和时间相关的输出，确保模型的输出是正确的日期或时间格式。
+3. 枚举解析器（Enum Parser）：这个解析器用于处理预定义的一组值，当模型的输出应该是这组预定义值之一时使用。例如，如果你定义了一个问题的答案只能是“是”或“否”，那么枚举解析器可以确保模型的回答是这两个选项之一。
+4. 结构化输出解析器（Structured Output Parser）：这个解析器用于处理复杂的、结构化的输出。如果你的应用需要模型生成具有特定结构的复杂回答（例如一份报告、一篇文章等），那么可以使用结构化输出解析器来实现。
+5. Pydantic（JSON）解析器：这个解析器用于处理模型的输出，当模型的输出应该是一个符合特定格式的 JSON 对象时使用。它使用 Pydantic 库，这是一个数据验证库，可以用于构建复杂的数据模型，并确保模型的输出符合预期的数据模型。
+6. 自动修复解析器（Auto-Fixing Parser）：这个解析器可以自动修复某些常见的模型输出错误。例如，如果模型的输出应该是一段文本，但是模型返回了一段包含语法或拼写错误的文本，自动修复解析器可以自动纠正这些错误。
+7. 重试解析器（RetryWithErrorOutputParser）：这个解析器用于在模型的初次输出不符合预期时，尝试修复或重新生成新的输出。例如，如果模型的输出应该是一个日期，但是模型返回了一个字符串，那么重试解析器可以重新提示模型生成正确的日期格式。
+
+上面的各种解析器中，前三种很容易理解，而结构化输出解析器你已经用过了。所以接下来我们重点讲一讲 Pydantic（JSON）解析器、自动修复解析器和重试解析器。
+
+### Pydantic（JSON）解析器实战
+1. 第一步：创建模型实例
+   先通过环境变量设置 OpenAI API 密钥，然后使用 LangChain 库创建了一个 OpenAI 的模型实例。这里我们仍然选择了 text-davinci-003 作为大语言模型。
+   ```
+   # ------Part 1
+   # 设置OpenAI API密钥
+   import os
+   os.environ["OPENAI_API_KEY"] = '你的OpenAI API Key'
+   
+   # 创建模型实例
+   from langchain import OpenAI
+   model = OpenAI(model_name='gpt-3.5-turbo-instruct')
+   ```
+2. 第二步：定义输出数据的格式
+   先创建了一个空的 DataFrame，用于存储从模型生成的描述。接下来，通过一个名为 FlowerDescription 的 Pydantic BaseModel 类，定义了期望的数据格式（也就是数据的结构）。
+   ```
+   # ------Part 2
+   # 创建一个空的DataFrame用于存储结果
+   import pandas as pd
+   df = pd.DataFrame(columns=["flower_type", "price", "description", "reason"])
+   
+   # 数据准备
+   flowers = ["玫瑰", "百合", "康乃馨"]
+   prices = ["50", "30", "20"]
+   
+   # 定义我们想要接收的数据格式
+   from pydantic import BaseModel, Field
+   class FlowerDescription(BaseModel):
+       flower_type: str = Field(description="鲜花的种类")
+       price: int = Field(description="鲜花的价格")
+       description: str = Field(description="鲜花的描述文案")
+       reason: str = Field(description="为什么要这样写这个文案")
+   ```
+   在这里我们用到了负责数据格式验证的 Pydantic 库来创建带有类型注解的类 FlowerDescription，它可以自动验证输入数据，确保输入数据符合你指定的类型和其他验证条件。
+3. 第三步：创建输出解析器
+   先使用 LangChain 库中的 PydanticOutputParser 创建了输出解析器，该解析器将用于解析模型的输出，以确保其符合 FlowerDescription 的格式。然后，使用解析器的 get_format_instructions 方法获取了输出格式的指示。
+   ```
+   # ------Part 3
+   # 创建输出解析器
+   from langchain.output_parsers import PydanticOutputParser
+   output_parser = PydanticOutputParser(pydantic_object=FlowerDescription)
+   
+   # 获取输出格式指示
+   format_instructions = output_parser.get_format_instructions()
+   # 打印提示
+   print("输出格式：",format_instructions)
+   ```
+   程序输出如下：
+   ```
+   输出格式： The output should be formatted as a JSON instance that conforms to the JSON schema below.
+
+   As an example, for the schema {"properties": {"foo": {"title": "Foo", "description": "a list of strings", "type": "array", "items": {"type": "string"}}}, "required": ["foo"]}}
+   the object {"foo": ["bar", "baz"]} is a well-formatted instance of the schema. The object {"properties": {"foo": ["bar", "baz"]}} is not well-formatted.
+   
+   Here is the output schema:
+   
+   {"properties": {"flower_type": {"title": "Flower Type", "description": "\u9c9c\u82b1\u7684\u79cd\u7c7b", "type": "string"}, "price": {"title": "Price", "description": "\u9c9c\u82b1\u7684\u4ef7\u683c", "type": "integer"}, "description": {"title": "Description", "description": "\u9c9c\u82b1\u7684\u63cf\u8ff0\u6587\u6848", "type": "string"}, "reason": {"title": "Reason", "description": "\u4e3a\u4ec0\u4e48\u8981\u8fd9\u6837\u5199\u8fd9\u4e2a\u6587\u6848", "type": "string"}}, "required": ["flower_type", "price", "description", "reason"]}
+   ```
+   上面这个输出，这部分是通过 output_parser.get_format_instructions() 方法生成的，这是 Pydantic (JSON) 解析器的核心价值，值得你好好研究研究。同时它也算得上是一个很清晰的提示模板，能够为模型提供良好的指导，描述了模型输出应该符合的格式。（其中 description 中的中文被转成了 UTF-8 编码。）
+   它指示模型输出 JSON Schema 的形式，定义了一个有效的输出应该包含哪些字段，以及这些字段的数据类型。例如，它指定了 "flower_type" 字段应该是字符串类型，"price" 字段应该是整数类型。这个指示中还提供了一个例子，说明了什么是一个格式良好的输出。
+   下面，我们会把这个内容也传输到模型的提示中，**让输入模型的提示和输出解析器的要求相互吻合，前后就呼应得上**。
+4. 第四步：创建提示模板
+   定义了一个提示模板，该模板将用于为模型生成输入提示。模板中包含了你需要模型填充的变量（如价格和花的种类），以及之前获取的输出格式指示。
+   ```
+   # ------Part 4
+   # 创建提示模板
+   from langchain import PromptTemplate
+   prompt_template = """您是一位专业的鲜花店文案撰写员。
+   对于售价为 {price} 元的 {flower} ，您能提供一个吸引人的简短中文描述吗？
+   {format_instructions}"""
+   
+   # 根据模板创建提示，同时在提示中加入输出解析器的说明
+   prompt = PromptTemplate.from_template(prompt_template, 
+          partial_variables={"format_instructions": format_instructions}) 
+   
+   # 打印提示
+   print("提示：", prompt)
+   ```
+5. 第五步：生成提示，传入模型并解析输出
+   这部分是程序的主体，我们循环来处理所有的花和它们的价格。对于每种花，都根据提示模板创建了输入，然后获取模型的输出。然后使用之前创建的解析器来解析这个输出，并将解析后的输出添加到 DataFrame 中。最后，你打印出了所有的结果，并且可以选择将其保存到 CSV 文件中。
+   ```
+   # ------Part 5
+   for flower, price in zip(flowers, prices):
+       # 根据提示准备模型的输入
+       input = prompt.format(flower=flower, price=price)
+       # 打印提示
+       print("提示：", input)
+   
+       # 获取模型的输出
+       output = model(input)
+   
+       # 解析模型的输出
+       parsed_output = output_parser.parse(output)
+       parsed_output_dict = parsed_output.dict()  # 将Pydantic格式转换为字典
+   
+       # 将解析后的输出添加到DataFrame中
+       df.loc[len(df)] = parsed_output.dict()
+   
+   # 打印字典
+   print("输出的数据：", df.to_dict(orient='records'))
+   ```
+   这一步中，你使用你的模型和输入提示（由鲜花种类和价格组成）生成了一个具体鲜花的文案需求（同时带有格式描述），然后传递给大模型，也就是说，提示模板中的 flower 和 price，此时都被具体的花取代了，而且模板中的 {format_instructions}，也被替换成了 JSON Schema 中指明的格式信息。
+   ![image](https://github.com/user-attachments/assets/8a891b29-8eff-478c-9128-b75e128ded41)
+   ![image](https://github.com/user-attachments/assets/2d8e06e5-e6f0-4a42-8996-db24999da111)
+
+### 自动修复解析器（OutputFixingParser）实战
+首先，让我们来设计一个解析时出现的错误。
+```
+# 导入所需要的库和模块
+from langchain.output_parsers import PydanticOutputParser
+from pydantic import BaseModel, Field
+from typing import List
+
+# 使用Pydantic创建一个数据格式，表示花
+class Flower(BaseModel):
+    name: str = Field(description="name of a flower")
+    colors: List[str] = Field(description="the colors of this flower")
+# 定义一个用于获取某种花的颜色列表的查询
+flower_query = "Generate the charaters for a random flower."
+
+# 定义一个格式不正确的输出
+misformatted = "{'name': '康乃馨', 'colors': ['粉红色','白色','红色','紫色','黄色']}"
+
+# 创建一个用于解析输出的Pydantic解析器，此处希望解析为Flower格式
+parser = PydanticOutputParser(pydantic_object=Flower)
+# 使用Pydantic解析器解析不正确的输出
+parser.parse(misformatted)
+```
+![image](https://github.com/user-attachments/assets/1f4f3feb-aaea-4f3c-b803-ae83cfd4c6f6)
+
+![image](https://github.com/user-attachments/assets/9536c0c7-6dbc-477f-a017-dc477e5d0ab5)
+
+### 重试解析器（RetryWithErrorOutputParser）实战
+![image](https://github.com/user-attachments/assets/93875b1b-b556-430f-a7a3-3cf164228441)
+
+首先还是设计一个解析过程中的错误。
+```
+# 定义一个模板字符串，这个模板将用于生成提问
+template = """Based on the user question, provide an Action and Action Input for what step should be taken.
+{format_instructions}
+Question: {query}
+Response:"""
+
+# 定义一个Pydantic数据格式，它描述了一个"行动"类及其属性
+from pydantic import BaseModel, Field
+class Action(BaseModel):
+    action: str = Field(description="action to take")
+    action_input: str = Field(description="input to the action")
+
+# 使用Pydantic格式Action来初始化一个输出解析器
+from langchain.output_parsers import PydanticOutputParser
+parser = PydanticOutputParser(pydantic_object=Action)
+
+# 定义一个提示模板，它将用于向模型提问
+from langchain.prompts import PromptTemplate
+prompt = PromptTemplate(
+    template="Answer the user query.\n{format_instructions}\n{query}\n",
+    input_variables=["query"],
+    partial_variables={"format_instructions": parser.get_format_instructions()},
+)
+prompt_value = prompt.format_prompt(query="What are the colors of Orchid?")
+
+# 定义一个错误格式的字符串
+bad_response = '{"action": "search"}'
+parser.parse(bad_response) # 如果直接解析，它会引发一个错误
+```
+
+![image](https://github.com/user-attachments/assets/8a8d3dea-49f2-40b2-8f76-b69949c0ef89)
+
+![image](https://github.com/user-attachments/assets/a3ff404d-0c9e-4bdf-815e-351398bc287b)
+
+## 总结
+结构化解析器和 Pydantic 解析器都旨在从大型语言模型中获取格式化的输出。结构化解析器更适合简单的文本响应，而 Pydantic 解析器则提供了对复杂数据结构和类型的支持。选择哪种解析器取决于应用的具体需求和输出的复杂性。
+
+自动修复解析器主要适用于纠正小的格式错误，它更加“被动”，仅在原始输出出现问题时进行修复。重试解析器则可以处理更复杂的问题，包括格式错误和内容缺失。它通过重新与模型交互，使得输出更加完整和符合预期。
+
+在选择哪种解析器时，需要考虑具体的应用场景。如果仅面临格式问题，自动修复解析器可能足够；但如果输出的完整性和准确性至关重要，那么重试解析器可能是更好的选择。
+
+## 思考题
+1. 到目前为止，我们已经使用了哪些 LangChain 输出解析器？请你说一说它们的用法和异同。同时也请你尝试使用其他类型的输出解析器，并把代码与大家分享。
+2. 为什么大模型能够返回 JSON 格式的数据，输出解析器用了什么魔法让大模型做到了这一点？
+3. 自动修复解析器的“修复”功能具体来说是怎样实现的？请做 debug，研究一下 LangChain 在调用大模型之前如何设计“提示”。
+4. 重试解析器的原理是什么？它主要实现了解析器类的哪个可选方法？
+
 # 基础篇（11讲）08｜链（上）：写一篇完美鲜花推文？用SequencialChain链接不同的组件
 # 基础篇（11讲）09｜链（下）：想学“育花”还是“插花”？用RouterChain确定客户意图
 # 基础篇（11讲）10｜记忆：通过Memory记住客户上次买花时的对话细节
