@@ -698,6 +698,115 @@ df.to_csv("flowers_with_descriptions.csv", index=False)
 4. 使用输出解析器后，调用模型时有没有可能仍然得不到所希望的输出？也就是说，模型有没有可能仍然返回格式不够完美的输出？
 
 # 基础篇（11讲）04｜提示工程（上）：用少样本FewShotTemplate和ExampleSelector创建应景文案
+这节课我就带着你进一步深究，如何利用 LangChain 中的提示模板，做好提示工程。
+
+![image](https://github.com/user-attachments/assets/13c51b7f-342a-416a-b956-b19290b50144)
+
+## 提示的结构
+当然了，从大原则到实践，还是有一些具体工作需要说明，下面我们先看一个实用的提示框架。
+
+![image](https://github.com/user-attachments/assets/9c3275e9-744c-4f82-92fe-394ccdef22df)
+
+在这个提示框架中：
+- **指令**（Instuction）告诉模型这个任务大概要做什么、怎么做，比如如何使用提供的外部信息、如何处理查询以及如何构造输出。这通常是一个提示模板中比较固定的部分。一个常见用例是告诉模型“你是一个有用的 XX 助手”，这会让他更认真地对待自己的角色。
+- **上下文**（Context）则充当模型的额外知识来源。这些信息可以手动插入到提示中，通过矢量数据库检索得来，或通过其他方式（如调用 API、计算器等工具）拉入。一个常见的用例时是把从向量数据库查询到的知识作为上下文传递给模型。
+- **提示输入**（Prompt Input）通常就是具体的问题或者需要大模型做的具体事情，这个部分和“指令”部分其实也可以合二为一。但是拆分出来成为一个独立的组件，就更加结构化，便于复用模板。这通常是作为变量，在调用模型之前传递给提示模板，以形成具体的提示。
+- **输出指示器**（Output Indicator）标记​​要生成的文本的开始。这就像我们小时候的数学考卷，先写一个“解”，就代表你要开始答题了。如果生成 Python 代码，可以使用 “import” 向模型表明它必须开始编写 Python 代码（因为大多数 Python 脚本以 import 开头）。这部分在我们和 ChatGPT 对话时往往是可有可无的，当然 LangChain 中的代理在构建提示模板时，经常性的会用一个“Thought：”（思考）作为引导词，指示模型开始输出自己的推理（Reasoning）。
+
+下面，就让我们看看如何使用 LangChain 中的各种提示模板做提示工程，将更优质的提示输入大模型。
+
+## LangChain 提示模板的类型
+LangChain 中提供 String（StringPromptTemplate）和 Chat（BaseChatPromptTemplate）两种基本类型的模板，并基于它们构建了不同类型的提示模板：
+
+![image](https://github.com/user-attachments/assets/e5d13cb5-2131-4525-8346-3f056f27028a)
+
+这些模板的导入方式如下：
+```
+from langchain.prompts.prompt import PromptTemplate
+from langchain.prompts import FewShotPromptTemplate
+from langchain.prompts.pipeline import PipelinePromptTemplate
+from langchain.prompts import ChatPromptTemplate
+from langchain.prompts import (
+    ChatMessagePromptTemplate,
+    SystemMessagePromptTemplate,
+    AIMessagePromptTemplate,
+    HumanMessagePromptTemplate,
+)
+```
+### 使用 PromptTemplate
+```
+from langchain import PromptTemplate
+
+template = """\
+你是业务咨询顾问。
+你给一个销售{product}的电商公司，起一个好的名字？
+"""
+prompt = PromptTemplate.from_template(template)
+
+print(prompt.format(product="鲜花"))
+```
+
+![image](https://github.com/user-attachments/assets/ae746b8e-3bb8-4dcb-969d-a1d1735f5856)
+
+当然，也可以通过提示模板类的构造函数，在创建模板时手工指定 input_variables，示例如下：
+```
+prompt = PromptTemplate(
+    input_variables=["product", "market"], 
+    template="你是业务咨询顾问。对于一个面向{market}市场的，专注于销售{product}的公司，你会推荐哪个名字？"
+)
+print(prompt.format(product="鲜花", market="高端"))
+```
+上面的方式直接生成了提示模板，并没有通过 from_template 方法从字符串模板中创建提示模板。二者效果是一样的。
+
+### 使用 ChatPromptTemplate
+对于 OpenAI 推出的 ChatGPT 这一类的聊天模型，LangChain 也提供了一系列的模板，这些模板的不同之处是它们有对应的角色。
+
+![image](https://github.com/user-attachments/assets/c505b5a2-cba3-4d9d-a875-3358f23a2fdd)
+
+下面，给出一个示例。
+```
+# 导入聊天消息类模板
+from langchain.prompts import (
+    ChatPromptTemplate,
+    SystemMessagePromptTemplate,
+    HumanMessagePromptTemplate,
+)
+# 模板的构建
+template="你是一位专业顾问，负责为专注于{product}的公司起名。"
+system_message_prompt = SystemMessagePromptTemplate.from_template(template)
+human_template="公司主打产品是{product_detail}。"
+human_message_prompt = HumanMessagePromptTemplate.from_template(human_template)
+prompt_template = ChatPromptTemplate.from_messages([system_message_prompt, human_message_prompt])
+
+# 格式化提示消息生成提示
+prompt = prompt_template.format_prompt(product="鲜花装饰", product_detail="创新的鲜花设计。").to_messages()
+
+# 下面调用模型，把提示传入模型，生成结果
+import os
+os.environ["OPENAI_API_KEY"] = '你的OpenAI Key'
+from langchain.chat_models import ChatOpenAI
+chat = ChatOpenAI()
+result = chat(prompt)
+print(result)
+```
+
+输出：
+```
+content='1. 花语创意\n2. 花韵设计\n3. 花艺创新\n4. 花漾装饰\n5. 花语装点\n6. 花翩翩\n7. 花语之美\n8. 花馥馥\n9. 花语时尚\n10. 花之魅力' 
+additional_kwargs={} 
+example=False
+```
+
+讲完上面两种简单易用的提示模板，下面开始介绍今天的重点内容，FewShotPromptTemplate。FewShot，也就是少样本这一概念，是提示工程中非常重要的部分，对应着 OpenAI 提示工程指南中的第 2 条——给模型提供参考（也就是示例）。
+
+### 使用 FewShotPromptTemplate
+在提示工程（Prompt Engineering）中，Few-Shot 和 Zero-Shot 学习的概念也被广泛应用。
+- 在 Few-Shot 学习设置中，模型会被给予几个示例，以帮助模型理解任务，并生成正确的响应。
+- 在 Zero-Shot 学习设置中，模型只根据任务的描述生成响应，不需要任何示例。
+
+下面，就让我们来通过 LangChain 中的 FewShotPromptTemplate 构建出最合适的鲜花文案。
+1. 创建示例样本
+
 # 基础篇（11讲）05｜提示工程（下）：用思维链和思维树提升模型思考质量
 # 基础篇（11讲）06｜调用模型：使用OpenAI API还是微调开源Llama2/ChatGLM？
 # 基础篇（11讲）07｜输出解析：用OutputParser生成鲜花推荐列表
