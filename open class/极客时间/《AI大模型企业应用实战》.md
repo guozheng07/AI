@@ -325,7 +325,6 @@ PROMPT = PromptTemplate(
   template=template,
 )
 
-
 query_chain = LLMRequestsChain(llm_chain = LLMChain(llm=llm, prompt=PROMPT), output_key="query_info")
 ```
 
@@ -347,7 +346,7 @@ translating_chain = LLMChain(
 )
 ```
 
-**通过 SequentialChain 将两个模型序列化组合**：
+**通过 SequentialChain 将两个模型序列化组合/串联**（看https://v02.api.js.langchain.com/classes/langchain.chains.SequentialChain.html，这个 api 好像已经废弃了）
 ```
 llm = AzureChatOpenAI(deployment_name = deployment, model_name=model, temperature=0, max_tokens=200)
 
@@ -370,7 +369,112 @@ def overall(question):
 overall("北京今天天气")
 ```
 
-# 基础篇（4讲）04｜保持会话状态：让Chatbot获得记忆
+# 基础篇（4讲）04｜保持会话状态：让ChatBot获得记忆
+## 没有记忆的模型
+GPT 是无状态的，示例：
+
+![image](https://github.com/user-attachments/assets/39ccd43b-74a0-4b72-aa7b-5b718ac3e602)
+
+## 利用 Gradio 快速构建原型/验证页面（可以保存历史对话记录）
+一个比较好的工具：快速建立验证页面 & 记忆历史对话 & 生成链接在本地和公有地址使用：
+
+![image](https://github.com/user-attachments/assets/43092678-9ec1-4360-9e3d-4b448df46078)
+
+## 构建有状态的对话（手动组装，为 GPT 提供外部记忆/历史对话，实现一个有记忆的 ChatBot）
+
+```
+import openai
+def get_response(msg):
+    # print(msg)
+    response = openai.ChatCompletion.create(
+        engine=deployment, # engine = "deployment_name".
+        messages=msg,
+        temperature = 0.9, 
+        max_tokens = 600
+    )
+    return response.choices[0].message.content
+```
+
+处理历史对话：
+```
+def history_to_prompt(chat_history): # 将对话内容保存在一个List里
+    msg = [{"role": "system", "content": "You are an AI assistant."}]
+    i = 0
+    for round_trip in chat_history: # 将List里的内容，组成 ChatCompletion的 messages部分，{role，content} dict
+        msg.append({"role": "user", "content": round_trip[0]})
+        msg.append({"role": "assistant", "content": round_trip[1]})
+    return msg
+
+def respond(message, chat_history):
+    his_msg = history_to_prompt(chat_history) # 将历史会话转化为 ChatCompletion 需要的 messages 格式
+    his_msg.append({"role": "user", "content": message}) # 放入当前用户问题
+    bot_message = get_response(his_msg)
+    chat_history.append((message, bot_message)) # 将用户问题和返回保存到 历史记录 List
+    return "", chat_history
+```
+
+```
+import gradio as gr
+with gr.Blocks() as demo:
+    chatbot = gr.Chatbot(height=480) # just to fit the notebook
+    msg = gr.Textbox(label="Prompt")
+    btn = gr.Button("Submit")
+    clear = gr.ClearButton(components=[msg, chatbot], value="Clear console")
+
+    btn.click(respond, inputs=[msg, chatbot], outputs=[msg, chatbot])
+    msg.submit(respond, inputs=[msg, chatbot], outputs=[msg, chatbot]) #Press enter to submit
+gr.close_all()
+demo.launch(share=True)
+```
+
+## 构建有状态的对话（通过 langchain 的记忆功能 ConversationBufferWindowMemory，实现一个有记忆的 ChatBot）
+```
+from langchain.chat_models import AzureChatOpenAI
+from langchain.memory import ConversationBufferWindowMemory
+from langchain.chains import ConversationChain
+# from langchain.chat_models import ChatOpenAI #直接访问OpenAI的GPT服务
+
+#llm = ChatOpenAI(model_name="gpt-4", temperature=0) #直接访问OpenAI的GPT服务
+llm = AzureChatOpenAI(deployment_name = deployment, model_name=model, temperature=0, max_tokens=200) #通过Azure的OpenAI服务
+
+
+# 记忆最近10轮的对话（太久的对话参考意义可能不大，可以节省 token）
+memory = ConversationBufferWindowMemory(k=10) 
+
+
+def get_response(input):
+    print("------------")
+    print(memory.load_memory_variables({}))
+    print("------------")
+    conversation_with_memory = ConversationChain(
+        llm=llm, 
+        memory=memory,
+        verbose=False
+    )
+    return conversation_with_memory.predict(input=input)
+```
+
+```
+import gradio as gr
+def respond(message, chat_history):
+    bot_message = get_response(message)
+    chat_history.append((message, bot_message))
+    return "", chat_history
+
+with gr.Blocks() as demo:
+    chatbot = gr.Chatbot(height=300) #just to fit the notebook
+    msg = gr.Textbox(label="Prompt")
+    btn = gr.Button("Submit")
+    clear = gr.ClearButton(components=[msg, chatbot], value="Clear console")
+
+    btn.click(respond, inputs=[msg, chatbot], outputs=[msg, chatbot])
+    msg.submit(respond, inputs=[msg, chatbot], outputs=[msg, chatbot]) #Press enter to submit
+gr.close_all()
+demo.launch(share=True) # 设为 true，可以在托管的主机上创建一个公共可访问的链接
+```
+
+## 作业
+尝试 langchain 不同类型的 memory。
 
 # 企业应用篇（8讲）
 # 企业应用篇（8讲）
