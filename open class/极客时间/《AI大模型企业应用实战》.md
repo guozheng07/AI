@@ -476,6 +476,8 @@ demo.launch(share=True) # 设为 true，可以在托管的主机上创建一个�
 ## 作业
 尝试 langchain 不同类型的 memory。
 
+![image](https://github.com/user-attachments/assets/a3df4d4b-8e16-4c90-9a63-1593da6cd0f3)
+
 使用 ConversationSummaryBufferMemory：
 ```
 from langchain.chat_models import AzureChatOpenAI
@@ -517,18 +519,130 @@ gr.close_all()
 demo.launch()
 ```
 
-# 企业应用篇（8讲）
-# 企业应用篇（8讲）
-# 企业应用篇（8讲）
-# 企业应用篇（8讲）
-# 企业应用篇（8讲）
-# 企业应用篇（8讲）
-# 企业应用篇（8讲）
-# 企业应用篇（8讲）
+![image](https://github.com/user-attachments/assets/b2051b5f-9018-473c-a3ee-630c9e33d62d)
 
-# 研发效率篇（6讲）
-# 研发效率篇（6讲）
-# 研发效率篇（6讲）
-# 研发效率篇（6讲）
-# 研发效率篇（6讲）
-# 研发效率篇（6讲）
+# 企业应用篇（8讲）05 | 对话启发式UI：交互方式的新思考
+## 启发式交互
+与大模型进行自然语法交流，直接生成页面，对传统的低代码实现有一定的冲击，带来了新的思考。
+
+## Copilot（副驾驶，还需要人来把控）
+处理问题工单：可以结合人为评论、AI自己的评论、历史相关工单的记录和日志等生成决策，进行自动执行或人工执行。
+
+![image](https://github.com/user-attachments/assets/781ed77d-b1e8-4aad-a545-596ca3e6e89d)
+
+![image](https://github.com/user-attachments/assets/0d00d2af-3812-43cf-9957-f2061651cc71)
+
+## 可以利用的不仅是文字生成能力
+![image](https://github.com/user-attachments/assets/7c555244-0c3f-4314-8cd8-d36d8645e816)
+
+## 作业
+![image](https://github.com/user-attachments/assets/84dedda8-f421-4e27-b06d-505e881c3a50)
+
+一个企业应用的实践：利用 Kubernetes GPT 去不断扫描你的集群，给到你它发现的问题，并提供建议。
+
+![image](https://github.com/user-attachments/assets/b692bd8c-c3a4-4aaa-8f06-8065bf1f2310)
+
+# 企业应用篇（8讲）06 | Function Calling：让GPT学会使用工具
+![image](https://github.com/user-attachments/assets/12a8116a-a6fe-41c3-a331-2d7c77b23498)
+
+![image](https://github.com/user-attachments/assets/efa3f793-f679-4ce1-9a86-bb58ec7a177c)
+
+![image](https://github.com/user-attachments/assets/a6683ac8-20f4-4a84-9b30-e908ef6ea613)
+
+![image](https://github.com/user-attachments/assets/8b748100-904e-4282-af1d-19a98e706ef0)
+
+```
+deployment = "gpt4"
+model = "gpt-4"
+
+# 获得当前集群的状态
+def get_current_cluster_state(cluster_name):
+    print(f"cluster:{cluster_name}")
+    return  """ERROR: Failed to pull image "chaocai/docker/dsp:latest"""
+
+import openai
+import json
+
+# 定义一个函数：key是方法名，value是方法
+funcs = {"get_current_cluster_state": get_current_cluster_state}
+
+def run(input):
+    msg=[{"role":"user","content":input}]
+    ret = run_conversation(msg)
+    return ret["content"] 
+
+def run_conversation(msg):
+    response = openai.ChatCompletion.create(
+        engine=deployment,
+        model=model,
+        messages=msg,
+        functions=[
+            {
+                "name": "get_current_cluster_state",
+                "description": "Get the current state in a given cluster",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "cluster_name": {
+                            "type": "string",
+                            "description": "the name of the cluster",
+                        },
+                        
+                    },
+                    "required": ["cluster_name"],
+                },
+            }
+        ],
+        function_call="auto",
+    )
+
+    message = response["choices"][0]["message"]
+    print("----- message ----")
+    print(message)
+    print("----- message ----")
+    # 如果不需要调用function，则直接返回结果
+    if not message.get("function_call"):
+        return message
+    
+    # 从返回值中获取调用的方法
+    function_name = message["function_call"]["name"]
+    # 从返回值中获取方法的参数值
+    function_args = json.loads(message["function_call"]["arguments"])
+    print(function_args)
+    res = funcs[function_name](function_args["cluster_name"]) 
+    message["content"]=None
+    msg.append(message)
+    msg.append({
+                "role": "function",
+                "name": function_name,
+                "content": res,
+            })
+    # 再次调用 GPT
+    return run_conversation(msg)
+```
+
+执行：
+```
+print(run("What's wrong with the cluster 'DSP'? And if there's an error, give me some suggestion. "))
+```
+
+一个大语言模型可以和你的企业环境进行交互，变成了一个 DevOps 工程师。
+
+![image](https://github.com/user-attachments/assets/0e85fbae-69c6-4179-928a-be999cf600a5)
+
+## 作业
+![image](https://github.com/user-attachments/assets/1de0f5d8-fb23-4f65-ae8e-753aa1f8a0f4)
+
+# 企业应用篇（8讲）07｜LangChain Agent：让GPT学会使用工具
+# 企业应用篇（8讲）08｜In-context learning：学习解决特定任务
+# 企业应用篇（8讲）09｜ReAct模式：构建自己的AutoGPT
+# 企业应用篇（8讲）10｜文本分片及向量化：让大模型应用企业内部数据
+# 企业应用篇（8讲）11｜LangChain Retrieval：连接大模型和内部文本
+# 企业应用篇（8讲）12｜整合所学：构建多模态Chatbot
+
+# 研发效率篇（6讲）13｜研发全过程中的应用：硅基工程师诞生
+# 研发效率篇（6讲）14｜代码生成：解决代码生成的依赖性并增强确定性
+# 研发效率篇（6讲）15｜有效利用LLM开发：编写大模型友好的代码
+# 研发效率篇（6讲）16｜云原生部署任务实践：让你成为更好的DevOps工程师
+# 研发效率篇（6讲）17｜HuggingFace与Pre-trained Model：借助AI社区的力量
+# 研发效率篇（6讲）18｜架构展望：集成大模型的应用参考架构
