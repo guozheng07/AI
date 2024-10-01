@@ -806,6 +806,108 @@ example=False
 
 下面，就让我们来通过 LangChain 中的 FewShotPromptTemplate 构建出最合适的鲜花文案。
 1. 创建示例样本
+   首先，创建一些示例。samples 这个列表包含了四个字典，每个字典代表了一种花的类型、适合的场合，以及对应的广告文案。这些示例样本，就是构建 FewShotPrompt 时，作为例子传递给模型的参考信息。
+   ```
+   # 1. 创建一些示例
+   samples = [
+     {
+       "flower_type": "玫瑰",
+       "occasion": "爱情",
+       "ad_copy": "玫瑰，浪漫的象征，是你向心爱的人表达爱意的最佳选择。"
+     },
+     {
+       "flower_type": "康乃馨",
+       "occasion": "母亲节",
+       "ad_copy": "康乃馨代表着母爱的纯洁与伟大，是母亲节赠送给母亲的完美礼物。"
+     },
+     {
+       "flower_type": "百合",
+       "occasion": "庆祝",
+       "ad_copy": "百合象征着纯洁与高雅，是你庆祝特殊时刻的理想选择。"
+     },
+     {
+       "flower_type": "向日葵",
+       "occasion": "鼓励",
+       "ad_copy": "向日葵象征着坚韧和乐观，是你鼓励亲朋好友的最好方式。"
+     }
+   ]
+   ```
+2. 创建提示模板
+   配置一个提示模板，将一个示例格式化为字符串。这个格式化程序应该是一个 PromptTemplate 对象。
+   ```
+   # 2. 创建一个提示模板
+   from langchain.prompts.prompt import PromptTemplate
+   template="鲜花类型: {flower_type}\n场合: {occasion}\n文案: {ad_copy}"
+   prompt_sample = PromptTemplate(input_variables=["flower_type", "occasion", "ad_copy"], 
+                                  template=template)
+   print(prompt_sample.format(**samples[0])) # 只输入了一个示例
+   ```
+   在这个步骤中，我们创建了一个 PromptTemplate 对象。这个对象是根据指定的输入变量和模板字符串来生成提示的。在这里，输入变量包括 "flower_type"、"occasion"、"ad_copy"，模板是一个字符串，其中包含了用大括号包围的变量名，它们会被对应的变量值替换。
+3. 创建 FewShotPromptTemplate 对象
+   ```
+   # 3. 创建一个FewShotPromptTemplate对象
+   from langchain.prompts.few_shot import FewShotPromptTemplate
+   prompt = FewShotPromptTemplate(
+       examples=samples,
+       example_prompt=prompt_sample,
+       suffix="鲜花类型: {flower_type}\n场合: {occasion}",
+       input_variables=["flower_type", "occasion"]
+   )
+   print(prompt.format(flower_type="野玫瑰", occasion="爱情"))
+   ```
+   可以看到，FewShotPromptTemplate 是一个更复杂的提示模板，它包含了多个示例和一个提示。这种模板可以使用多个示例来指导模型生成对应的输出。目前我们创建一个新提示，其中包含了根据指定的花的类型“野玫瑰”和场合“爱情”。
+4. 调用大模型创建新文案
+   ```
+   # 4. 把提示传递给大模型
+   import os
+   os.environ["OPENAI_API_KEY"] = '你的Open AI Key'
+   from langchain.llms import OpenAI
+   model = OpenAI(model_name='gpt-3.5-turbo-instruct')
+   result = model(prompt.format(flower_type="野玫瑰", occasion="爱情"))
+   print(result)
+   ```
+### 使用示例选择器
+如果我们的示例很多，那么一次性把所有示例发送给模型是不现实而且低效的。另外，每次都包含太多的 Token 也会浪费流量（OpenAI 是按照 Token 数来收取费用）。
+
+LangChain 给我们提供了示例选择器，来选择最合适的样本。（注意，因为示例选择器使用向量相似度比较的功能，此处需要安装向量数据库，这里我使用的是开源的 Chroma，你也可以选择之前用过的 Qdrant。）下面，
+
+就是使用示例选择器的示例代码。
+```
+# 5. 使用示例选择器
+from langchain.prompts.example_selector import SemanticSimilarityExampleSelector
+from langchain.vectorstores import Chroma
+from langchain.embeddings import OpenAIEmbeddings
+
+# 初始化示例选择器
+example_selector = SemanticSimilarityExampleSelector.from_examples(
+    samples,
+    OpenAIEmbeddings(),
+    Chroma,
+    k=1
+)
+
+# 创建一个使用示例选择器的FewShotPromptTemplate对象
+prompt = FewShotPromptTemplate(
+    example_selector=example_selector, 
+    example_prompt=prompt_sample, 
+    suffix="鲜花类型: {flower_type}\n场合: {occasion}", 
+    input_variables=["flower_type", "occasion"]
+)
+print(prompt.format(flower_type="红玫瑰", occasion="爱情"))
+```
+在这个步骤中，它首先创建了一个 SemanticSimilarityExampleSelector 对象，这个对象可以根据语义相似性选择最相关的示例。
+
+然后，它创建了一个新的 FewShotPromptTemplate 对象，这个对象使用了上一步创建的选择器来选择最相关的示例生成提示。然后，我们又用这个模板生成了一个新的提示，因为我们的提示中需要创建的是红玫瑰的文案，所以，示例选择器 example_selector 会根据语义的相似度（余弦相似度）找到最相似的示例，也就是“玫瑰”，并用这个示例构建了 FewShot 模板。
+
+这样，我们就避免了把过多的无关模板传递给大模型，以节省 Token 的用量。
+
+## 总结
+总的来说，提供示例对于解决某些任务至关重要，通常情况下，FewShot 的方式能够显著提高模型回答的质量。不过，当少样本提示的效果不佳时，这可能表示模型在任务上的学习不足。在这种情况下，我们建议对模型进行微调或尝试更高级的提示技术。
+
+下一节课，我们将在探讨输出解析的同时，讲解另一种备受关注的提示技术，被称为“思维链提示”（Chain of Thought，简称 CoT）。这种技术因其独特的应用方式和潜在的实用价值而引人注目。
+
+## 思考题
+![image](https://github.com/user-attachments/assets/994741be-56dc-4c94-a0cf-05bcc167b880)
 
 # 基础篇（11讲）05｜提示工程（下）：用思维链和思维树提升模型思考质量
 # 基础篇（11讲）06｜调用模型：使用OpenAI API还是微调开源Llama2/ChatGLM？
