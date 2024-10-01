@@ -128,11 +128,41 @@ prompt 工程：自然语言编程
 - 大语言模型结合刷题 APP，在哪些维度可以进行功能上的创新？
 
 # 11 案例分析：技术小白如何快速学会 Python 编程？
+- 我是一个技术小白，请介绍一下 Python 语言。
+- 请通俗易懂的解释，Python 语言能用应用在我们工作中哪些方面？
+- 请解释一下什么是 BMI?
+- 目前我有一台可以联网的 Windows 电脑，我应该如何通过 Python 语言来实现 BMI 体质指数的程序呢？帮我列出步骤。
+- 当我在输入身高的时候，当我输入一个超过人类正常身高的数据时返回 BMI 的结果异常。我想限制输入的范围如果超出则提示用户重新输入（**约束**）。
 
 # 12 案例分析：学术论文写作遇到瓶颈， ChatGPT 如何助你一臂之力？
+1. 假设我是一名大学本科四年级的学生，专业是计算机科学与技术，熟悉我的信息，回复 OK 即可。（窗口1）
+2. 目前我需要写一篇论文，但是我没有任何经验，我希望知道一篇合格的本科毕业论文的结构是什么样的。
+3. 我是一名大学本科四年级的学生，专业是计算机科学与技术，帮我构思10个论文的标题和方向，中文回复。（**新开一个窗口2，避免破坏上述对话的上下文接口**）
+4. 论文题目是《基于云计算的分布式储存系统研究》，帮我生成论文内容的简要概述，一般不超过300字，包括研究背景、研究目的、研究方法、主要成果和结论。（窗口1）
+5. 论文题目是《基于云计算的分布式储存系统研究》，帮我从论文中提取3～5个核心词汇，便于检索和归类。
 
-# 13 案例分析：市场分析新手如何迅速提升分析能力？
+![image](https://github.com/user-attachments/assets/2b905e0c-7368-4dcb-9666-24d39186ef37)
+
+![image](https://github.com/user-attachments/assets/7be493c6-1005-433d-91f2-0d95588e17b2)
+
+......（根据第2次对话的结果，依次生成每个章节，其中正文部分分内容依次生成，不要一次性提问）
+
+# 13 案例分析：市场分析新手如何迅速提升数据分析能力？
+选中 ChatGPT4o模型，在对话框处上传文件。
+
+![image](https://github.com/user-attachments/assets/632b77ea-1174-4ae1-ad47-4a93c9f6aa44)
+
+![image](https://github.com/user-attachments/assets/09ddd1a3-8b09-4105-a5ea-1200df2ae722)
+
+![image](https://github.com/user-attachments/assets/a34cd999-28a7-44a7-b0a3-5b3fe0718c6e)
+
+![image](https://github.com/user-attachments/assets/56024a82-0172-4c89-b240-dc3a26ba27f8)
 
 # 14 案例分析：客户服务人员如何应对海量反馈？
+智能客服案例：https://github.com/zhayujie/chatgpt-on-wechat
+
+![image](https://github.com/user-attachments/assets/f7cdc3c4-cc1a-4af3-889d-f4c56f3ac773)
+
+![image](https://github.com/user-attachments/assets/559aa719-9477-481c-8272-a268fc0e0ff2)
 
 # 15 prompt 工程的未来与持续学习
