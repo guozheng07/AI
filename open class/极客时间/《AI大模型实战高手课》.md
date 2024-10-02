@@ -1293,14 +1293,282 @@ predictions = model.predict(X_test)
 ![image](https://github.com/user-attachments/assets/4234dc94-a7b6-49d9-a462-4311eb03f704)
 
 ## 机器学习过程
+了解了机器学习的基本概念后，我们来看看机器学习一般有哪些过程，从工程化角度，我梳理了 10 个步骤，从问题提出到模型上线及运维，算是比较全面的了。
+
+![image](https://github.com/user-attachments/assets/9beccdd1-03bd-48f4-90bd-a537dbda2e77)
+
+![image](https://github.com/user-attachments/assets/353a9908-9570-4e97-80fe-78eef0f9acb3)
+
+![image](https://github.com/user-attachments/assets/9bd07de6-fe55-4bd9-acd9-caa3d13e1b46)
+
+![image](https://github.com/user-attachments/assets/7dc9f6a2-5d74-46b1-8304-e1247f84ab22)
+
+## 经典算法
+### 线性回归
+![image](https://github.com/user-attachments/assets/0a7bd3ea-8e81-41c7-909e-79deed4d4d2d)
+
+下面是一个使用 sklearn 库进行线性回归的简单例子。假设我们有以下面积和价格的数据：
+```
+面积（平方米）: [35, 45, 40, 60, 65]
+价格（万元）: [30, 40, 35, 60, 65]
+```
+
+我们将使用这些数据来拟合一个线性回归模型，并预测面积为 50 平方米的房屋的价格。
+```
+from sklearn.linear_model import LinearRegression
+import numpy as np
+import matplotlib.pyplot as plt
+
+# 定义数据
+X = np.array([35, 45, 40, 60, 65]).reshape(-1, 1) # 面积
+y = np.array([30, 40, 35, 60, 65]) # 价格
+
+# 创建并拟合模型
+model = LinearRegression()
+model.fit(X, y)
+
+# 预测面积为50平方米的房屋价格
+predict_area = np.array([50]).reshape(-1, 1)
+predicted_price = model.predict(predict_area)
+
+print(f"预测的房价为：{predicted_price[0]:.2f}万美元")
+
+# 绘制数据点和拟合直线
+plt.scatter(X, y, color='blue')
+plt.plot(X, model.predict(X), color='red')
+plt.title('房价预测')
+plt.xlabel('面积（平方米）')
+plt.ylabel('价格（万元）')
+plt.show()
+```
+
+![image](https://github.com/user-attachments/assets/454140cd-11eb-4652-827e-e45e323862b5)
+
+### 逻辑回归
+![image](https://github.com/user-attachments/assets/99d1e8b1-9a7a-468c-9ac2-0751f9fd66d8)
+
+```
+# 导入库
+from sklearn.linear_model import LogisticRegression
+import numpy as np
+# 准备数据
+X = np.array([[10], [20], [30], [40], [50]]) # 学习时间
+y = np.array([0, 0, 1, 1, 1]) # 通过考试与否
+# 创建逻辑回归模型并训练
+model = LogisticRegression()
+model.fit(X, y)
+# 预测学习时间为25小时的学生通过考试的概率
+prediction_probability = model.predict_proba([[25]])
+prediction = model.predict([[25]])
+print(f"通过考试的概率为：{prediction_probability[0][1]:.2f}")
+print(f"预测分类：{'通过' if prediction[0] == 1 else '未通过'}")
+```
+
+![image](https://github.com/user-attachments/assets/58eb9ed3-9d11-466d-8b63-83b19afd4778)
+
+## 小结
+![image](https://github.com/user-attachments/assets/5a167ded-397d-496b-bf5c-949861270f99)
+
+## 思考题
+这节课我没有给出各个算法的缺点，你可以思考一下，线性回归的局限是什么，逻辑回归的局限又是什么？
 
 # 第三章：打入核心，挑战底层技术原理 (8讲) 09｜关于机器学习，你需要了解的基本概念（二）
+上一节课我们了解了机器学习的基本概念，学习了线性回归和逻辑回归，相信你对机器学习有了初步理解，这节课我们继续讲解机器学习的经典算法，先从决策树开始。
+
+## 经典算法
+### 决策树
+![image](https://github.com/user-attachments/assets/80958f28-c9c5-423b-b440-6caf051fab04)
+
+我们看一下使用 sklearn 库提供的决策树算法和模型的示例代码。
+```
+from sklearn.tree import DecisionTreeClassifier, plot_tree
+import matplotlib.pyplot as plt
+import numpy as np
+
+# 创建数据集
+X = np.array([
+    [0, 2, 0],  # 晴天，高温，无风
+    [1, 1, 1],  # 阴天，中温，微风
+    [2, 0, 2],  # 雨天，低温，强风
+    # ... 添加更多样本以增加模型的准确性
+])
+y = np.array([0, 1, 2])  # 分别对应去野餐、去博物馆、在家看书
+
+# 初始化决策树模型，设置最大深度为5
+clf = DecisionTreeClassifier(max_depth=5, random_state=42)
+
+# 训练模型
+clf.fit(X, y)
+
+# 可视化决策树
+plt.figure(figsize=(20, 10))
+plot_tree(clf, filled=True, feature_names=["天气状况", "温度", "风速"], class_names=["去野餐", "去博物馆", "在家看书"], rounded=True, fontsize=12)
+plt.show()
+```
+
+程序运行结果如下：
+
+![image](https://github.com/user-attachments/assets/847ad9a5-9ff5-4b30-92a3-f6374c7720b1)
+
+![image](https://github.com/user-attachments/assets/d9d23227-c370-445c-b178-74f1bb95dcc4)
+
+### 随机森林
+![image](https://github.com/user-attachments/assets/572dbbb2-3011-4a69-9eb0-0da45cdeff5a)
+
+![image](https://github.com/user-attachments/assets/8e97c4aa-1364-4d1d-8944-842c170c5247)
+
+简易代码如下：
+```
+import matplotlib.pyplot as plt
+from sklearn.tree import plot_tree
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.datasets import load_iris
+
+# 加载数据集
+iris = load_iris()
+X, y = iris.data, iris.target
+
+# 训练随机森林模型
+rf = RandomForestClassifier(n_estimators=3, random_state=42) # 使用3棵树以便于可视化
+rf.fit(X, y)
+
+# 绘制随机森林中的决策树
+fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(20, 5), dpi=100)
+for index in range(0, 3):
+    plot_tree(rf.estimators_[index], 
+              feature_names=iris.feature_names, 
+              class_names=iris.target_names, 
+              filled=True, 
+              ax=axes[index])
+
+    axes[index].set_title(f'Tree {index + 1}')
+
+plt.tight_layout()
+plt.show()
+```
+
+程序运行结果如下：
+
+![image](https://github.com/user-attachments/assets/710c339d-010d-4430-b5fc-115aeb3010ee)
+
+![image](https://github.com/user-attachments/assets/d503c6d6-be06-44f7-8932-c78a53a6ea30)
+
+### 支持向量机
+![image](https://github.com/user-attachments/assets/3a4ca6b6-d1ad-4a74-9e43-48e3501f56c0)
+
+我们简单看下示例代码：
+```
+from sklearn import datasets
+from sklearn.svm import SVC
+from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+import numpy as np
+
+# 生成模拟数据
+X, y = datasets.make_blobs(n_samples=50, centers=2, random_state=6)
+
+# 划分训练集和测试集
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+# 创建 SVM 模型
+model = SVC(kernel='linear')
+model.fit(X_train, y_train)
+
+# 绘制数据点和分类边界
+plt.figure(figsize=(8, 6))
+plt.scatter(X[:, 0], X[:, 1], c=y, s=50, cmap='autumn')
+
+# 绘制决策边界
+ax = plt.gca()
+xlim = ax.get_xlim()
+ylim = ax.get_ylim()
+
+# 创建网格点
+xx = np.linspace(xlim[0], xlim[1], 30)
+yy = np.linspace(ylim[0], ylim[1], 30)
+YY, XX = np.meshgrid(yy, xx)
+xy = np.vstack([XX.ravel(), YY.ravel()]).T
+Z = model.decision_function(xy).reshape(XX.shape)
+
+# 绘制决策边界和间隔
+ax.contour(XX, YY, Z, colors='k', levels=[-1, 0, 1], alpha=0.5, linestyles=['--', '-', '--'])
+plt.scatter(model.support_vectors_[:, 0], model.support_vectors_[:, 1], s=100, linewidth=1, facecolors='none', edgecolors='k')
+plt.title("支持向量机分类示例")
+plt.xlabel("特征1")
+plt.ylabel("特征2")
+plt.show()
+```
+
+程序运行结果如下：
+
+![image](https://github.com/user-attachments/assets/898d6467-edb9-4c22-98b1-f4e3a3f34253)
+
+### 神经网络
+![image](https://github.com/user-attachments/assets/fc3107e4-350a-48fa-a124-5575fa68acfa)
+
+我们来看一个示例。
+```
+import matplotlib.pyplot as plt
+
+# 创建一个简单的神经网络图，并调整文字标签的位置
+def plot_neural_network_adjusted():
+    fig, ax = plt.subplots(figsize=(10, 6))  # 创建绘图对象
+
+    # 输入层、隐藏层、输出层的神经元数量
+    input_neurons = 3
+    hidden_neurons = 4
+    output_neurons = 2
+
+    # 绘制神经元
+    layer_names = ['输入层', '隐藏层', '输出层']
+    for layer, neurons in enumerate([input_neurons, hidden_neurons, output_neurons]):
+        for neuron in range(neurons):
+            circle = plt.Circle((layer*2, neuron*1.5 - neurons*0.75 + 0.75), 0.5, color='skyblue', ec='black', lw=1.5, zorder=4)
+            ax.add_artist(circle)
+
+    # 绘制连接线
+    for input_neuron in range(input_neurons):
+        for hidden_neuron in range(hidden_neurons):
+            line = plt.Line2D([0*2, 1*2], [input_neuron*1.5 - input_neurons*0.75 + 0.75, hidden_neuron*1.5 - hidden_neurons*0.75 + 0.75], c='gray', lw=1, zorder=1)
+            ax.add_artist(line)
+    for hidden_neuron in range(hidden_neurons):
+        for output_neuron in range(output_neurons):
+            line = plt.Line2D([1*2, 2*2], [hidden_neuron*1.5 - hidden_neurons*0.75 + 0.75, output_neuron*1.5 - output_neurons*0.75 + 0.75], c='gray', lw=1, zorder=1)
+            ax.add_artist(line)
+
+    # 设置图参数
+    ax.set_xlim(-1, 5)
+    ax.set_ylim(-2, max(input_neurons, hidden_neurons, output_neurons)*1.5)
+    plt.axis('off')  # 不显示坐标轴
+
+    # 调整层名称的绘制位置，确保不被遮挡
+    for i, name in enumerate(layer_names):
+        plt.text(i*2, max(input_neurons, hidden_neurons, output_neurons)*0.75 + 1, name, horizontalalignment='center', fontsize=14, zorder=5)
+
+    plt.title("简单神经网络图解", fontsize=16)
+    return fig
+
+fig = plot_neural_network_adjusted()
+plt.show()
+```
+
+![image](https://github.com/user-attachments/assets/7d3a3a0b-1209-4a60-a384-c473ca186acb)
+
+![image](https://github.com/user-attachments/assets/8cecdadc-72f3-4a22-869e-590b6375b45d)
+
+## 小结
+这节课我们只是进行概念性的介绍，目的在于认识基本的机器学习算法，对于初学者而言，理解这些基本的概念至关重要，通过这两节课的学习，我们了解了一些比较常见的机器学习算法，通过一些简单的代码示例，理解了各个算法的实际应用案例。虽然有些抽象，但是慢慢看还是能够理解的。建议你深入研究下 sklearn 这个库，里面包含这类场景的机器学习算法，然后自己动手敲一下这些示例代码感受一下。
+
+## 思考题
+实际上我们上面讲的神经网络之所以强大，就是因为有激活函数，使神经网络呈现为非线性的，那么你可以思考一下，为什么激活函数可以使神经网络呈非线性？如果没有激活函数，神经网络会出现什么问题？
+
 # 第三章：打入核心，挑战底层技术原理 (8讲) 10｜经典算法之RNN：开发人员绕不开的循环神经网络
 # 第三章：打入核心，挑战底层技术原理 (8讲) 11｜关于自然语言处理，你需要了解的基本概念
 # 第三章：打入核心，挑战底层技术原理 (8讲) 12｜深入理解Word2Vec：解开词向量生成的奥秘
 # 第三章：打入核心，挑战底层技术原理 (8讲) 13｜深入理解Seq2Seq：让我们看看语言翻译是怎么来的
 # 第三章：打入核心，挑战底层技术原理 (8讲) 14｜Transformer技术原理：为什么说Transformer是大模型架构的基石？（上）
 # 第三章：打入核心，挑战底层技术原理 (8讲) 15｜Transformer技术原理：为什么说Transformer是大模型架构的基石？（下）
+
 # 第四章：终极玩法，从0到1构建大模型 (10讲) 16｜从零开始，构建一个具有100M参数规模的Transformer模型
 # 第四章：终极玩法，从0到1构建大模型 (10讲) 17｜模型解剖：探究模型内部到底是什么？
 # 第四章：终极玩法，从0到1构建大模型 (10讲) 18｜大模型预训练：Pre-Training如何让模型变聪明？
@@ -1311,6 +1579,7 @@ predictions = model.predict(X_test)
 # 第四章：终极玩法，从0到1构建大模型 (10讲) 23｜模型核心技术指标：如何提高上下文长度？
 # 第四章：终极玩法，从0到1构建大模型 (10讲) 24｜架构设计（上）：企业如何设计大模型应用架构？
 # 第四章：终极玩法，从0到1构建大模型 (10讲) 25｜架构设计（下）：企业如何搭建 AI 中台？
+
 # 第五章：热点速递，AI行业发展趋势解读 (5讲) 26｜为什么说Mamba是Transformer的最强挑战者？
 在过去的几年里，Transformer 模型在自然语言处理领域占据了主导地位。自从 2017 年谷歌提出 Transformer 以来，BERT、GPT-3 等基于 Transformer 的模型取得了巨大的成功。
 
