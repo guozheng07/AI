@@ -313,6 +313,162 @@ chain2.invoke({"person": "obama", "language": "spanish"})
 从软件开发及架构的思路去看，LangChain 未来还有可能增加什么组件？你可以对比 Java 技术体系来思考一下。欢迎你把你思考后的结果分享到评论区，也欢迎你把这节课的内容分享给需要的朋友，我们下节课再见。
 
 # 第二章：超燃实战，深度玩转 AI 模型 (4讲) 04｜本地部署：如何本地化部署开源大模型ChatGLM3-6B？
+前面听我讲了这么多，相信你也很想上手试一试了。从这节课开始，我们进入一个新的章节，这部分我们会学习如何部署开源大模型 ChatGLM3-6B，本地搭建向量库并结合 LangChain 做检索增强（RAG），并且我会带你做一次微调，从头学习大模型的**部署、微调、推理**等过程。
+
+这节课我们就来讲一下如何本地化部署 ChatGLM3-6B（后面我们简称为 6B）。讲 6B 之前我们先整体看一下目前国内外大模型的发展状况，以便我们进行技术选型。
+
+## 大模型的选择
+![image](https://github.com/user-attachments/assets/99f7d8b7-0bd5-4768-b4d8-7a78ca69234d)
+
+![image](https://github.com/user-attachments/assets/e9e25873-1fd0-4e33-9135-ea0bdaf71892)
+
+## 如何搞定显卡资源？
+![image](https://github.com/user-attachments/assets/d62ae030-8d1f-4355-8e5b-828bc01285f2)
+
+## ChatGLM3-6B 部署
+ChatGLM-6B 目前已经发展到第 3 代 ChatGLM3-6B，除了中英文推理，还增强了数学、代码等推理能力，我记得一年前的 6B 在代码或者数学方面是比较弱的。根据目前的官方信息，在语义、数学、推理、代码、知识等不同角度的数据集上测评显示，ChatGLM3-6B-Base 在 10B 以下的基础模型中性能是最强的，除此之外，还具有 8K、32K、128K 等多个长文理解能力版本。下面我们就一步一步来安装部署 ChatGLM3-6B，你也可以在[官方文档](https://github.com/THUDM/ChatGLM3)里找到安装教程。
+
+### 准备环境
+![image](https://github.com/user-attachments/assets/5a95eafd-91da-4deb-8e06-72f7b407ff8c)
+
+### 克隆代码
+```
+git clone https://github.com/THUDM/ChatGLM3
+```
+
+### 安装依赖
+注意：要切换成国内 pip 源，比如阿里云，下载会快很多。
+```
+pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/
+cd ChatGLM3
+pip install -r requirements.txt
+```
+
+### 下载模型
+```
+git clone https://huggingface.co/THUDM/chatglm3-6b
+```
+
+如果 Huggingface 下载比较慢的话，也可以选择 ModelScope 进行下载。下载完将 chatglm3-6b 文件夹重新命名成 model 并放在 ChatGLM3 文件夹下，这一步非必需，只要放在一个路径下，在下一步提示的文件里，指定好模型文件路径即可。
+
+### 命令行模式启动
+打开文件 basic_demo/cli_demo.py，修改模型加载路径。
+```
+MODEL_PATH = os.environ.get('MODEL_PATH', '../model')
+```
+
+执行 python cli_demo.py。
+
+![image](https://github.com/user-attachments/assets/d01d8404-8535-42df-a07a-53191b4b3d2b)
+
+### Web 控制台模式启动
+打开文件 basic_demo/web_demo_gradio.py，修改模型加载路径。
+```
+MODEL_PATH = os.environ.get('MODEL_PATH', '../model')
+```
+
+同时修改最后一行：
+```
+demo.launch(server_name="127.0.0.1", server_port=7870, inbrowser=True, share=False)
+```
+
+server_name 修改为本地 IP，并指定端口 server_port 即可。也可以设置 share=True，使用 gradio 提供的链接进行访问。
+
+执行 python web_demo_gradio.py。
+
+![image](https://github.com/user-attachments/assets/3b7732e3-2074-4344-bce9-07b6880c7351)
+
+默认情况下，模型以 FP16 精度加载，大概需要 13GB 显存。如果你的电脑没有 GPU，只能通过 CPU 启动，6B 也是支持的，需要大概 32G 的内存。我们修改一下模型加载脚本。
+```
+model = AutoModel.from_pretrained(MODEL_PATH trust_remote_code=True).float()
+```
+
+如果你的电脑有 GPU，但是显存不够，也可以通过修改模型加载脚本，在 4-bit 量化下运行，只需要 6GB 左右的显存就可以进行流程推理。
+```
+model = AutoModel.from_pretrained(MODEL_PATH, trust_remote_code=True, ).quantize(4).cuda()
+```
+
+同时，官方也提供了一个全新的 web demo，支持 Chat、Tool、Code Interpreter，就在我们克隆下来的代码里，在文件夹 composite_demo 下。
+```
+cd composite_demo
+pip install -r requirements.txt
+export MODEL_PATH=../model
+streamlit run main.py 或者 python -m streamlit run main.py
+```
+
+页面确实上了一个档次。
+
+![image](https://github.com/user-attachments/assets/21be55b7-fb3d-4193-937d-7030b0b94211)
+
+![image](https://github.com/user-attachments/assets/a2ce9e80-30e8-4551-90e8-85a6159757a7)
+
+## 超参数介绍
+ChatGLM3-6B 有 3 个参数可以设置。
+1. max_length：模型的总 token 限制，包括输入和输出的 tokens。
+2. temperature：模型的温度。温度只是调整单词的概率分布。它最终的宏观效果是，在较低的温度下，我们的模型更具确定性，而在较高的温度下，则不那么确定。数字越小，给出的答案越精确。
+3. top_p：模型采样策略参数。每一步只从累积概率超过某个阈值 p 的最小单词集合中进行随机采样，而不考虑其他低概率的词。只关注概率分布的核心部分，忽略了尾部。
+
+对于以下场景，官方推荐使用这样的参数进行设置：
+
+![image](https://github.com/user-attachments/assets/9c8338db-6bcc-4de3-8078-88b308e69512)
+
+系统设置好，我们基本就可以开始进行问答了，ChatGLM3-6B 采用了一种新的 Prompt 格式，看上去应该是模仿的 ChatGPT。下面我们介绍下这种提问格式。
+
+## 新的 Prompt 格式
+新的提示格式，主要是增加了几个角色，在对话场景中，有且仅有以下三种角色。
+- system：系统信息，出现在消息的最前面，可以指定回答问题的角色。
+- user：我们提的问题。
+- assistant：大模型给出的回复。
+
+在代码场景中，有且仅有 user、assistant、system、observation 四种角色。observation 是外部返回的结果，比如调用外部 API，代码执行逻辑等返回的结果，都通过 observation 返回。observation 必须放在 assistant 之后。
+
+下面这个是官方提供的例子，基本把以上 4 种角色都解释清楚了。
+```
+<|system|>
+Answer the following questions as best as you can. You have access to the following tools:
+[
+    {
+        "name": "get_current_weather",
+        "description": "Get the current weather in a given location",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "location": {
+                    "type": "string",
+                    "description": "The city and state, e.g. San Francisco, CA",
+                },
+                "unit": {"type": "string"},
+            },
+            "required": ["location"],
+        },
+    }
+]
+<|user|>
+今天北京的天气怎么样？
+<|assistant|>
+好的，让我们来查看今天的天气
+<|assistant|>get_current_weather
+
+
+```python
+tool_call(location="beijing", unit="celsius")
+
+<|observation|>
+{"temperature": 22}
+<|assistant|>
+根据查询结果，今天北京的气温为 22 摄氏度。
+```
+
+![image](https://github.com/user-attachments/assets/acfea71e-0a22-4f7b-bc91-344c531ba879)
+
+## 小结
+这节课我们学习了如何部署 6B。从模型的选择到环境配置再到模型启动、推理，整体来说已经比较全面了，如果你在实际操作的过程中遇到环境问题，可以自己 Google 一下尝试去解决。毕竟每个人的环境不一样，可能会遇到各种各样的问题，主要还是 Python 相关的多一些。如果这一节课有些内容你没有看懂也不用急，先把模型部署及推理这一块熟悉一下，后面我们会逐渐深入地讲解。
+
+![image](https://github.com/user-attachments/assets/db3b0745-8d9f-4867-a5cc-3bf134e9a76b)
+
+## 思考题
+我们知道 ChatGLM3-6B 是一个具有 62 亿参数规模的大语言模型，那你知道大模型的参数是什么意思吗？62 亿表示什么？欢迎你把你的观点分享到评论区，我们一起讨论，如果你觉得这节课的内容对你有帮助的话，也欢迎你分享给其他朋友，我们下节课再见！
+
 # 第二章：超燃实战，深度玩转 AI 模型 (4讲) 05｜大模型微调：如何基于ChatGLM3-6B+Lora构建基本法律常识大模型？
 # 第二章：超燃实战，深度玩转 AI 模型 (4讲) 06｜RAG实战：基于ChatGLM3-6B+LangChain+Faiss搭建企业内部知识库
 # 第二章：超燃实战，深度玩转 AI 模型 (4讲) 07｜大模型API封装：自建大模型如何对外服务？
