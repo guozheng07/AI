@@ -1250,6 +1250,50 @@ data: {"text": "你好！我是人工智能助手，很高兴为您服务。请�
 ![image](https://github.com/user-attachments/assets/f6e28bbe-9ff0-49cb-8ecd-6862dd373adb)
 
 # 第三章：打入核心，挑战底层技术原理 (8讲) 08｜关于机器学习，你需要了解的基本概念（一）
+![image](https://github.com/user-attachments/assets/7a4cc8a3-ce11-4959-b191-035994db071d)
+
+## 机器学习
+![image](https://github.com/user-attachments/assets/acbbd5c4-04dd-400f-b9ff-b6265fb8cea6)
+
+我们使用 Python 和一个流行的机器学习库，如 scikit-learn，来实现这一目标，代码可能会是这样的：
+```
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+import pandas as pd
+
+# 加载数据集
+data = pd.read_csv("housing_data.csv")  # 假设这是我们的房屋数据
+
+# 准备数据
+X = data[['面积', '卧室数量', '地理位置']]  # 特征
+y = data['售价']  # 目标变量
+
+# 划分数据集
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# 初始化模型
+model = LinearRegression()
+
+# 训练模型
+model.fit(X_train, y_train)
+
+# 使用模型进行预测
+predictions = model.predict(X_test)
+
+# 现在，`predictions`包含了我们模型预测的房价
+```
+
+![image](https://github.com/user-attachments/assets/a6f30663-fd15-403b-9615-3e2d598c36ab)
+
+![image](https://github.com/user-attachments/assets/ad391d1b-6012-495c-a3b5-b181eadecefe)
+
+## 深度学习
+![image](https://github.com/user-attachments/assets/1616a9b7-5546-4e28-aeb3-4a9d68f0cdc2)
+
+![image](https://github.com/user-attachments/assets/4234dc94-a7b6-49d9-a462-4311eb03f704)
+
+## 机器学习过程
+
 # 第三章：打入核心，挑战底层技术原理 (8讲) 09｜关于机器学习，你需要了解的基本概念（二）
 # 第三章：打入核心，挑战底层技术原理 (8讲) 10｜经典算法之RNN：开发人员绕不开的循环神经网络
 # 第三章：打入核心，挑战底层技术原理 (8讲) 11｜关于自然语言处理，你需要了解的基本概念
