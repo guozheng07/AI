@@ -1709,7 +1709,302 @@ print(generate_text("Here is", 4, model, max_sequence_len))
 # 第三章：打入核心，挑战底层技术原理 (8讲) 11｜关于自然语言处理，你需要了解的基本概念
 ![image](https://github.com/user-attachments/assets/40a63922-651d-48a6-b905-fbd787562bc4)
 
-## 
+## NLP 基础
+![image](https://github.com/user-attachments/assets/32487307-97ad-4563-99a9-1f544d8be58b)
+
+## 文本预处理
+### 文本清洗
+文本清洗主要包括**去除噪声**及**标准化文本**等。去除噪声是指清除文本中对分析无关紧要的部分，比如 HTML 标签、标点符号、特殊字符等。你可以参考我给出的示例代码。
+```
+import re
+
+def remove_noise(text):
+    # 去除HTML标签
+    text = re.sub(r'<.*?>', '', text)
+    # 去除标点符号和特殊字符
+    text = re.sub(r'[^\w\s]', '', text)
+    return text
+
+text = "<p>Hello, World! Here's a <a href='https://example.com'>link</a>.</p>"
+clean_text = remove_noise(text)
+print(clean_text)
+
+# 全部标准化成小写
+tokens_normalized = [token.lower() for token in clean_text]
+print(tokens_normalized)
+```
+
+输出：
+```
+Hello World Heres a link
+['h', 'e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd', ' ', 'h', 'e', 'r', 'e', 's', ' ', 'a', ' ', 'l', 'i', 'n', 'k']
+```
+
+### 分词
+将文本分解成词汇、句子等。
+```
+from nltk.tokenize import word_tokenize
+text = "Natural language processing (NLP) is a field of computer science."
+tokens = word_tokenize(text)
+print(tokens)
+```
+
+输出：
+```
+['Natural', 'language', 'processing', '(', 'NLP', ')', 'is', 'a', 'field', 'of', 'computer', 'science', '.']
+```
+
+### 去除停用词
+停用词是文本中频繁出现但对分析意义不大的词，如 is、and 等。去除它们可以提高处理效率和分析效果，同时还可以使数据集变小。
+```
+from nltk.corpus import stopwords
+import re
+
+def remove_noise(text):
+    # 去除HTML标签
+    text = re.sub(r'<.*?>', '', text)
+    # 去除标点符号和特殊字符
+    text = re.sub(r'[^\w\s]', '', text)
+    return text
+
+stop_words = set(stopwords.words('english'))
+print(stop_words)
+
+text = "<p>Hello, World! Here's a <a href='https://example.com'>link</a>.</p>"
+clean_text = remove_noise(text)
+print(clean_text)
+
+tokens_normalized = [token.lower() for token in clean_text]
+print(tokens_normalized)
+
+filtered_tokens = [word for word in tokens_normalized if not word in stop_words]
+print(filtered_tokens)
+```
+
+输出：
+```
+{"you'd", 'just', 'shouldn', 'here', 'as', 'mightn', "wasn't", 'him', 'have', 'you', 'an', 'not', 'mustn', 'ma', 'o', 'myself', 'what', 'was', "shouldn't", 'during', 'wouldn', 'no', "mightn't", 'weren', "don't", 'those', 'having', 'off', "hasn't", 'that', 'did', 'very', 'now', 'couldn', 'shan', 'the', 'hasn', 'if', 'do', "weren't", 'on', 'after', "you've", "she's", 'i', 'y', 'didn', 'at', 'it', 'too', 'until', 'or', 'his', 'we', 'wasn', 'about', 'same', 'won', 'd', "isn't", 'below', 'our', 'for', 'while', 'its', "couldn't", 'isn', 'ours', 'between', 'which', 'aren', 'my', 'once', 'of', 'from', 'each', "should've", 'so', "aren't", 'and', "didn't", 'haven', "you're", 'needn', 'is', 'll', 'will', 'these', 'again', 've', 'be', 'over', 'nor', 'why', 'are', 'then', 't', 'm', 'where', 'other', "needn't", 'theirs', "mustn't", 'ain', 'more', 'to', 's', 'can', 'through', 'than', 'both', 'above', 'were', "shan't", 'any', 'their', 'such', 'don', 'into', 'themselves', 'there', 'some', 'with', 'himself', 'hers', 'me', 'them', 'who', 'am', 'only', 'out', 'yourselves', "that'll", 'when', 'down', 'further', 'herself', 'but', "doesn't", 'does', "hadn't", "won't", 'her', 'whom', 'has', 'in', 'doesn', "haven't", 'before', "wouldn't", 'should', 'yourself', 'a', 'yours', 'itself', 'because', 'he', 'been', "you'll", 'she', 'few', 'by', 'being', 'hadn', 'they', 'how', 'own', "it's", 'up', 'ourselves', 'doing', 'against', 'most', 'your', 'all', 'had', 'under', 're', 'this'}
+Hello World Heres a link
+['h', 'e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd', ' ', 'h', 'e', 'r', 'e', 's', ' ', 'a', ' ', 'l', 'i', 'n', 'k']
+['h', 'e', 'l', 'l', ' ', 'w', 'r', 'l', ' ', 'h', 'e', 'r', 'e', ' ', ' ', 'l', 'n', 'k']
+```
+
+稍微解释一下，第 11 行 stop_words = set(stopwords.words('english'))，就是从停用词库取出英文相关的停用词，放到 set 集合中，之后就是对原始文本降噪、标准化，最后通过和停用词库比较，把标准化后文本中的停用词去掉。
+
+### 词干提取
+词干提取是去除单词的词缀（如前缀和后缀），以便找到单词的“词干”或“根形式”。这个过程是启发式的，可能不会返回一个真实的单词，而是返回单词的一个截断形式。例如，running、runs 和 runner 经过词干提取后可能都会被简化为 run。词干提取可以减少词形变化的影响，使相关的单词能够在分析时被归纳为相同的形式，有助于简化文本数据，并提高文本处理任务的性能。我们看一个简单的示例。
+```
+import nltk
+from nltk.stem import PorterStemmer
+from nltk.tokenize import word_tokenize
+# 确保已下载NLTK的tokenizers和corpora
+nltk.download('punkt')
+# 初始化词干提取器
+stemmer = PorterStemmer()
+# 示例文本
+text = "The leaves on the trees are falling quickly in the autumn season."
+# 分词
+tokens = word_tokenize(text)
+# 词干提取
+stemmed_tokens = [stemmer.stem(token) for token in tokens]
+print("原始文本:")
+print(tokens)
+print("\n词干提取后:")
+print(stemmed_tokens)
+```
+
+运行结果如下：
+```
+原始文本:
+['The', 'leaves', 'on', 'the', 'trees', 'are', 'falling', 'quickly', 'in', 'the', 'autumn', 'season', '.']
+
+词干提取后:
+['the', 'leav', 'on', 'the', 'tree', 'are', 'fall', 'quickli', 'in', 'the', 'autumn', 'season', '.']
+```
+
+### 词形还原
+词形还原是将单词还原到它的词典形式，也就是词条的基本形式或词元形式。**与词干提取相比，词形还原考虑了单词的词性，并尝试进行更加精确地转换，返回的是一个真实的单词**。例如，am、are 和 is 经过词形还原都会变为 be。词形还原能够准确地将单词还原到其标准形式，有助于保持语义的准确性。这在需要精确理解和分析文本意义的场合特别有用，如在语义分析或深入的文本理解任务中。
+```
+from nltk.stem import WordNetLemmatizer
+import nltk
+from nltk.tokenize import word_tokenize
+# 确保已下载wordnet和averaged_perceptron_tagger
+nltk.download('wordnet')
+text = "The leaves on the trees are falling quickly in the autumn season."
+# 分词
+tokens = word_tokenize(text)
+# 初始化词形还原器
+lemmatizer = WordNetLemmatizer()
+# 词形还原（默认为名词）
+lemmatized_tokens = [lemmatizer.lemmatize(token) for token in tokens]
+print("原始文本:")
+print(tokens)
+print("\n词形还原:")
+print(lemmatized_tokens)
+```
+
+程序运行结果：
+```
+原始文本:
+['The', 'leaves', 'on', 'the', 'trees', 'are', 'falling', 'quickly', 'in', 'the', 'autumn', 'season', '.']
+
+词形还原:
+['The', 'leaf', 'on', 'the', 'tree', 'are', 'falling', 'quickly', 'in', 'the', 'autumn', 'season', '.']
+```
+
+### 词性标注
+词性标注是指将文本中的每个单词或符号标注为相应的词性如名词、动词、形容词等。这一过程可以揭示单词在句子或语言结构中的作用和意义。
+
+### 命名实体识别
+命名实体识别是识别文本中具有特定意义的实体，如人名、地点、组织、日期、时间、货币数额等，旨在识别出文本中的实体，并将它们归类为预定义的类别。
+
+我们通过一个代码示例看一下。
+```
+import spacy
+# 加载英文模型
+nlp = spacy.load("en_core_web_sm")
+# 示例文本
+text = "Apple is looking at buying U.K. startup for $1 billion."
+# 处理文本
+doc = nlp(text)
+# 词性标注
+print("POS Tagging:")
+for token in doc:
+    print((token.text, token.pos_))
+# 命名实体识别
+print("\nNamed Entity Recognition:")
+for ent in doc.ents:
+    print((ent.text, ent.label_))
+```
+
+程序运行结果如下：
+```
+('Apple', 'PROPN')
+('is', 'AUX')
+('looking', 'VERB')
+('at', 'ADP')
+('buying', 'VERB')
+('U.K.', 'PROPN')
+('startup', 'NOUN')
+('for', 'ADP')
+('$', 'SYM')
+('1', 'NUM')
+('billion', 'NUM')
+('.', 'PUNCT')
+
+Named Entity Recognition:
+('Apple', 'ORG')
+('U.K.', 'GPE')
+('$1 billion', 'MONEY')
+```
+
+实际上文本预处理有很多种任务，要根据实际情况决定。这取决于我们拿到的文本和希望处理成什么样，比如去除数字、去除特殊符号等，上面讲的这几种是比较常见，且比较通用的。当文本预处理完成后，我们一般就要进行特征提取了。
+
+## 特征提取
+特征提取是 NLP 中的一个重要步骤，它涉及将原始文本转换成可以被机器学习模型理解和处理的数值形式。在文本数据中，特征提取是挑选出反映文本特性的信息，将其转化为一种结构化的数值表示。这一步骤对于提高模型性能至关重要，因为机器学习算法通常无法直接处理原始文本数据。简单而言，机器学习算法没办法直接处理原始文本，只能先挑出来主要信息，然后将主要信息用计算机能懂的方式进行表达，比如向量化。下面我来介绍两种常见的方式。
+
+### 词袋模型（Bag of Words，BoW）
+词袋模型比较简单，忽略了文本中单词的顺序，仅仅关注每个单词出现的次数。在这个模型中，每个文档被转换成一个长向量，向量的长度等于词汇表中单词的数量，每个单词分配一个固定的索引。向量中的每个元素是该单词在文档中出现的次数。举一个例子：
+```
+from sklearn.feature_extraction.text import CountVectorizer
+corpus = [
+    'Text analysis is fun',
+    'Text analysis with Python',
+    'Data Science is fun',
+    'Python is great for text analysis'
+]
+vectorizer = CountVectorizer()
+X = vectorizer.fit_transform(corpus)
+print(vectorizer.get_feature_names_out())
+print(X.toarray())
+```
+
+程序运行结果如下：
+```
+['analysis' 'data' 'for' 'fun' 'great' 'is' 'python' 'science' 'text'
+ 'with']
+[[1 0 0 1 0 1 0 0 1 0]
+ [1 0 0 0 0 0 1 0 1 1]
+ [0 1 0 1 0 1 0 1 0 0]
+ [1 0 1 0 1 1 1 0 1 0]]
+```
+
+第一行输出表示所有文档中至少出现过一次的唯一单词。CountVectorizer 按照字母顺序排列这些单词，并为每个单词分配了一个特定的索引位置。第二部分是文档的向量表示，它是一个 4x10 的矩阵，因为我们有 4 个文档和 10 个唯一单词。每一行代表一个文档，每一列代表词汇表中的一个单词。
+
+第一行对应第一个文档 "Text analysis is fun"，analysis 出现 1 次，text 出现 1 次，is 出现 1 次，fun 出现 1 次，其他单词在该文档中没有出现。这种表示方法比较简单，因为单词没有顺序，所以就会部分失真，对原文语义的理解不足，而词嵌入进一步解决了这个问题。
+
+### 词嵌入（Word Embeddings）
+我们在之前的课程里介绍过词嵌入，你回想一下。当时我说，男人和男孩，男人和国王，在某些属性上有很强的相似度，所以基于词嵌入产生的检索是真实意义上的相似。词嵌入是文本的一种表现方式，将词汇映射到实际向量空间中，同时可以捕获语义关系，我们通过下面这个例子来看一下。
+```
+from gensim.models import Word2Vec
+from nltk.tokenize import word_tokenize
+# 定义训练语料
+sentences = [
+    "The cat sat on the mat.",
+    "Dogs and cats are enemies.",
+    "The dog chased the cat."
+]
+# 使用NLTK进行分词
+tokenized_sentences = [word_tokenize(sentence.lower()) for sentence in sentences]
+print(tokenized_sentences)
+# 训练Word2Vec模型
+model = Word2Vec(sentences=tokenized_sentences, vector_size=100, window=5, min_count=1, workers=4)
+# 获取单词“cat”的向量
+cat_vector = model.wv['cat']
+print("cat的向量表示:", cat_vector)
+# 找到与“cat”最相似的单词
+similar_words = model.wv.most_similar('cat', topn=5)
+print("和cat相似的单词是:", similar_words)
+```
+
+程序运行结果如下：
+```
+[['the', 'cat', 'sat', 'on', 'the', 'mat', '.'], ['dogs', 'and', 'cats', 'are', 'enemies', '.'], ['the', 'dog', 'chased', 'the', 'cat', '.']]
+cat的向量表示: [ 9.4563962e-05  3.0773198e-03 -6.8126451e-03 -1.3754654e-03
+  7.6685809e-03  7.3464094e-03 -3.6732971e-03  2.6427018e-03
+ -8.3171297e-03  6.2054861e-03 -4.6373224e-03 -3.1641065e-03
+  9.3113566e-03  8.7338570e-04  7.4907029e-03 -6.0740625e-03
+  5.1605068e-03  9.9228229e-03 -8.4573915e-03 -5.1356913e-03
+ -7.0648370e-03 -4.8626517e-03 -3.7785638e-03 -8.5361991e-03
+  7.9556061e-03 -4.8439382e-03  8.4236134e-03  5.2625705e-03
+ -6.5500261e-03  3.9578713e-03  5.4701497e-03 -7.4265362e-03
+ -7.4057197e-03 -2.4752307e-03 -8.6257253e-03 -1.5815723e-03
+ -4.0343284e-04  3.2996845e-03  1.4418805e-03 -8.8142155e-04
+ -5.5940580e-03  1.7303658e-03 -8.9737179e-04  6.7936908e-03
+  3.9735902e-03  4.5294715e-03  1.4343059e-03 -2.6998555e-03
+ -4.3668128e-03 -1.0320747e-03  1.4370275e-03 -2.6460087e-03
+ -7.0737829e-03 -7.8053069e-03 -9.1217868e-03 -5.9351693e-03
+ -1.8474245e-03 -4.3238713e-03 -6.4606704e-03 -3.7173224e-03
+  4.2891586e-03 -3.7390434e-03  8.3781751e-03  1.5339935e-03
+ -7.2423196e-03  9.4337985e-03  7.6312125e-03  5.4932819e-03
+ -6.8488456e-03  5.8226790e-03  4.0090932e-03  5.1853694e-03
+  4.2559016e-03  1.9397545e-03 -3.1701624e-03  8.3538452e-03
+  9.6121803e-03  3.7926030e-03 -2.8369951e-03  7.1275235e-06
+  1.2188185e-03 -8.4583247e-03 -8.2239453e-03 -2.3101569e-04
+  1.2372875e-03 -5.7433806e-03 -4.7252737e-03 -7.3460746e-03
+  8.3286157e-03  1.2129784e-04 -4.5093987e-03  5.7017053e-03
+  9.1800150e-03 -4.0998720e-03  7.9646818e-03  5.3754342e-03
+  5.8791232e-03  5.1259040e-04  8.2130842e-03 -7.0190406e-03]
+和cat相似的单词是: [('and', 0.19912061095237732), ('on', 0.17272791266441345), ('dog', 0.17018885910511017), ('are', 0.14595399796962738), ('enemies', 0.0640898048877716)]
+```
+
+![image](https://github.com/user-attachments/assets/38ca517f-78b6-4a93-9a23-79c23ebe045d)
+
+## 模型训练
+![image](https://github.com/user-attachments/assets/6a34a6fa-f2dc-4f2f-8a41-de3091ee1663)
+
+## 评估与应用
+![image](https://github.com/user-attachments/assets/c733b9ae-359a-47ca-9ad9-bb0d17ee0da1)
+
+## 小结
+这节课我们主要学习了自然语言处理（NLP）相关的基本概念，结合之前学习的机器学习的基本概念，可以算是入门了，如果拿学习 Java 来举例的话，我们应该是把类、变量、数据类型、接口等概念看完了，后面就是实操了。最后我们通过一张脑图回顾一下这节课学到的知识。
+
+![image](https://github.com/user-attachments/assets/ae6f0ef0-eeb0-4c3e-bdf1-8e0cfbeb3e0b)
+
+后面我们会进入实操部分，学习 Word2Vec 这个模型，深入理解自然语言处理的原理。
+
+## 思考题
+假设你手上有一个文本库，是某个明星近 10 年发的微博的集合，你需要通过 NLP 方法，识别出哪些博文包含“打车”？你打算怎么设计？
 
 # 第三章：打入核心，挑战底层技术原理 (8讲) 12｜深入理解Word2Vec：解开词向量生成的奥秘
 # 第三章：打入核心，挑战底层技术原理 (8讲) 13｜深入理解Seq2Seq：让我们看看语言翻译是怎么来的
