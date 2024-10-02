@@ -470,6 +470,173 @@ tool_call(location="beijing", unit="celsius")
 我们知道 ChatGLM3-6B 是一个具有 62 亿参数规模的大语言模型，那你知道大模型的参数是什么意思吗？62 亿表示什么？欢迎你把你的观点分享到评论区，我们一起讨论，如果你觉得这节课的内容对你有帮助的话，也欢迎你分享给其他朋友，我们下节课再见！
 
 # 第二章：超燃实战，深度玩转 AI 模型 (4讲) 05｜大模型微调：如何基于ChatGLM3-6B+Lora构建基本法律常识大模型？
+![image](https://github.com/user-attachments/assets/09a2b866-e324-40bc-b020-41850a33dcf5)
+
+## 如何增强模型能力？
+微调是其中的一个方法，当然还有其他方式，比如外挂知识库或者通过 Agent 调用其他 API 数据源，下面我们详细介绍下这几种方式的区别。
+- **微调**是一种让预先训练好的模型适应特定任务或数据集的方案，成本相对较低，这种情况下，模型会学习训练者提供的微调数据，并且具备一定的理解能力。
+- **知识库**使用向量数据库或者其他数据库存储数据，为大语言模型提供信息来源外挂。
+- **API** 和知识库类似，为大语言模型提供信息来源外挂。
+
+简单理解，**微调相当于让大模型去学习一门新的学科，在回答的时候进行闭卷考试**，**知识库和 API 相当于为大模型提供了新学科的课本，回答的时候进行开卷考试**。几种模式并不冲突，我们可以同时使用几种方案来优化模型，提升内容输出能力，下面我简单介绍下几种模式的优缺点。
+
+![image](https://github.com/user-attachments/assets/6ea7fb50-c2ad-4446-9cd4-25ec96207ffe)
+
+注意，大模型领域所谓的性能，英文原词是 Performance，指推理效果，并非我们软件开发里所说的接口性能，比如响应时间、吞吐量等。
+
+了解这几种模型的区别，有助于我们进行技术方案选型。在大模型实际落地过程中，我们需要先分析需求，然后确定落地方式。
+1. **微调：准备数据、微调、验证、提供服务**。
+2. **知识库：准备数据、构建向量库、构建智能体、提供服务**。
+3. **API：准备数据、开发接口、构建智能体、提供服务**。
+
+接下来我会通过一个真实的案例，把整个过程串起来。
+
+## 企业真实案例
+![image](https://github.com/user-attachments/assets/b356b3ad-e223-4160-89bd-a86dfe0452a7)
+
+### 需求分析
+法律小助手用来帮助员工解决日常生活中遇到的法律问题，以问答的方式进行，这种场景可以使用知识库模式，也可以使用微调模式。使用知识库模式的话，需要将数据集拆分成一条一条的知识，先放到向量库，然后通过 Agent 从向量库检索，再输入给大模型，这种方式的好处是万一我们发现数据集不足，可以随时补充，即时生效。
+
+还有一种方式就是进行微调，因为法律知识有的时候需要一定的逻辑能力，不是纯文本检索，而微调就是这样的，通过在一定量的数据集上的训练，增加大模型法律相关的常识及思维，从而进行推理。经过分析，我们确定下来，使用微调的方式进行。接下来就是准备数据了。
+
+### 准备数据
+准备数据有很多种，可以从公共数据集下载，然后进行调整并加入私有化的知识，也可以完全自己整理，为了便于展示，我从 [GitHub](https://github.com/SophonPlus/ChineseNlpCorpus/blob/master/datasets/lawzhidao/intro.ipynb) 上面找了一个公开的数据集，下载下来的是一个 CSV 格式的文件。官方给的微调数据格式如下：
+```
+{"conversations": [{"role": "user", "content": "类型#裙*裙长#半身裙"}, {"role": "assistant", "content": "这款百搭时尚的仙女半身裙，整体设计非常的飘逸随性，穿上之后每个女孩子都能瞬间变成小仙女啦。料子非常的轻盈，透气性也很好，穿到夏天也很舒适。"}]}
+```
+
+conversations 是对话（提供训练示例）；user 对应的 content 是大模型的输入；assistant 对应的 content 是大模型的输出。
+
+现在我们需要把 CSV 里的内容，转成官方要求的格式。转化代码我直接让 ChatGPT 帮我生成，用了如下提示：
+```
+原始数据是CSV格式，包含4列：title、question、reply、is_best，需要通过Python语言处理该CSV文件，来构建大语言模型的微调数据集，目标数据集格式是JSON的，单条数据格式为：{"conversations":[{"role":"user","content":"value1"},{"role":"assistant","content":"value2"}]}，需要将原始CSV文件里的title列填充到目标JSON文件里的value1处，原始CSV文件里的reply填充到目标JSON文件里的value1处，请注意：最终生成的不是JSON数组，而是每个JSON对象生成一行，出示示例代码。
+```
+
+ChatGPT 生成的 Python 代码：
+```
+import csv
+import json
+
+# CSV文件的路径
+csv_file_path = 'your_csv_file.csv'
+# 输出JSON文件的路径
+json_file_path = 'output_json_file.json'
+
+# 打开CSV文件，并进行处理
+with open(csv_file_path, mode='r', encoding='utf-8') as csv_file, \
+     open(json_file_path, mode='w', encoding='utf-8') as json_file:
+    
+    csv_reader = csv.DictReader(csv_file)
+    for row in csv_reader:
+        # 根据CSV文件的列名获取数据
+        title = row['title']
+        reply = row['reply']
+        # 构造单条对话的JSON结构
+        conversation_entry = {
+            "conversations": [
+                {"role": "user", "content": title},
+                {"role": "assistant", "content": reply}
+            ]
+        }
+        # 将单条记录以JSON格式写入文件，每条记录一行
+        json_line = json.dumps(conversation_entry, ensure_ascii=False)
+        json_file.write(json_line + '\n')
+
+```
+
+通过上面的代码，我们就可以成功将下载下来的 CSV 格式的数据集，格式化成微调所需的数据集。接下来就可以准备微调了。
+
+### 微调
+1. **安装依赖**
+   我们先进入到 finetune_demo 文件夹。执行 pip3 install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple，过程中报了一个错。
+
+   ![image](https://github.com/user-attachments/assets/87c39f01-21b5-4990-aac5-a2870fd53de2)
+
+   原因是缺少 libopenmpi-dev 库，所以我们需要安装这个库。
+   ```
+   sudo apt update
+   sudo apt-get install libopenmpi-dev
+   ```
+
+   紧接着安装 nltk 库。
+   ```
+   pip3 install nltk
+   ```
+
+   到这里，依赖包基本就安装完了。你在操作的过程中，如果遇到其他库的缺失，有可能是操作系统库也有可能是 Python 库，按照提示完成安装即可。
+2. **准备数据**
+   训练需要至少准备两个数据集，一个用来训练，一个用来验证。我们把“准备数据”环节格式化好的文件命名为 train.json，再准备一个相同格式的测试数据集 dev.json，在里面添加一些测试数据，几十条即可，当大模型在训练的过程中，会自动进行测试验证，输出微调效果。然后在 finetune_demo 文件夹下建立一个 data 文件夹，将这两个文件放入 data 文件夹中。
+3. **修改配置**
+   修改 finetune_demo/configs 下的 lora.yaml 文件，将 train_file、val_file、test_file、output_dir 定义好，记得写全路径，其他参数也可以按需修改，比如：
+   - max_steps：最大训练轮数，我们填 3000。
+   - save_steps：每训练多少轮保存权重，填 500。
+   
+   其他参数可以参考下面这张表格。
+
+   ![image](https://github.com/user-attachments/assets/6299cffd-7784-4bf0-a133-3248a53e054c)
+4. **开始微调**
+   如果数据量比较少的话，比如少于 50 行，注意这一行，会报数组越界，修改小一点即可。
+   ```
+   eval_dataset=val_dataset.select(list(range(50))),
+   ```
+
+   微调脚本用的是 finetune_hf.py。
+   - 第一个参数是训练数据集所在目录，此处值是 data。
+   - 第二个参数是模型所在目录，此处值是 ./model。
+   - 第三个参数是微调配置，此处值是 configs/lora.yaml。
+   
+   执行微调命令，记得 Python 命令使用全路径。
+   ```
+   /usr/bin/python3 finetune_hf.py data ../model configs/lora.yaml
+   ```
+
+   如果控制台输出下面这些内容，则说明微调开始了。
+
+   ![image](https://github.com/user-attachments/assets/578b2f66-3a97-42ee-a245-c8d8b01e044e)
+
+   trainable params 指的是在模型训练过程中可以被优化或更新的参数数量。在深度学习模型中，这些参数通常是网络的权重和偏置。它们是可训练的，因为在训练过程中，通过反向传播算法这些参数会根据损失函数的梯度不断更新，以减小模型输出与真实标签之间的差异。通过调整 lora.yaml 配置文件里 peft_config 下面的参数 r 来改变可训练参数的数量，r 值越大，trainable params 越大。
+
+   我们这次微调 trainable params 为 1.9M（190 万），整个参数量是 6B（62 亿），训练比为 3%。
+
+   ![image](https://github.com/user-attachments/assets/c9a34560-97db-4a71-b34d-eba087daabab)
+
+   ![image](https://github.com/user-attachments/assets/ea4a02f6-ffee-4a82-bc7c-407e1759b939)
+5. **验证**
+   等待微调结束，就可以进行验证了，官方 demo 提供了验证脚本，执行如下命令：
+   ```
+   /usr/bin/python3 inference_hf.py output/checkpoint-3000/ --prompt "xxxxxxxxxxxx"
+   ```
+   output/checkpoint-3000 是指新生成的权重，模型启动的时候会将原模型和新权重全部加载，然后进行推理。–prompt 是输入的提示。
+
+   下面是一组微调前后的对比问答，我们对比着来看一下。
+
+   ![image](https://github.com/user-attachments/assets/b3af5822-473b-4733-a04a-d3b55416786d)
+
+   我们的微调数据集中有下面这条内容：
+   ```
+   {"conversations": [{"role": "user", "content": "不交房电费多出由谁承担？法律法规第几条？"}, {"role": "assistant", "content": "按照约定处理，协商不成可以委托律师处理。"}]}
+   ```
+
+   部分回答效果是比较明显的。
+
+   当然，这里只是通过快速搭建一个 demo 向你展示 Lora 微调的细节。实际生产过程中，需要考虑的事情比较多，比如训练轮数、并行数、微调效果比对等一系列问题，需要我们根据实际情况进行调整。
+6. **提供服务**
+   当微调完成，我们验证后得知整体效果满足一定的百分比，那我们就认为这个微调是有效的，可以对外服务，接下来就可以通过 API 组件将模型的输入输出封装成接口对外提供服务了。实际生产环境中，我们还需要考虑几件事情：
+   - 模型的推理性能（效果）；
+   - 模型的推理吞吐量；
+   - 服务的限流，适当保护大模型集群；
+   - 服务降级，当大模型服务不可用的时候，可以考虑通过修改开关，将 AI 小助手隐藏暂停使用。
+   
+   具体架构思路，后面第四章我会进行专门的讲解，到那时我们再详细学习具体内容。
+
+## 小结
+![image](https://github.com/user-attachments/assets/120d2d9b-9a0f-43a0-b5bd-877cc7bb3cf1)
+
+![image](https://github.com/user-attachments/assets/72c088b3-7341-4e11-b34b-1fb0dab62836)
+
+## 思考题
+在实际微调过程中我们发现微调不是轮数越多越好，有时轮数低产生的权重会比轮数高产生的权重效果更好，你可以想想这是为什么？
+
 # 第二章：超燃实战，深度玩转 AI 模型 (4讲) 06｜RAG实战：基于ChatGLM3-6B+LangChain+Faiss搭建企业内部知识库
 # 第二章：超燃实战，深度玩转 AI 模型 (4讲) 07｜大模型API封装：自建大模型如何对外服务？
 # 第三章：打入核心，挑战底层技术原理 (8讲) 08｜关于机器学习，你需要了解的基本概念（一）
