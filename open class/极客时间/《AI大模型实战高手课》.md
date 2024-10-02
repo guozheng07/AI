@@ -2007,7 +2007,164 @@ cat的向量表示: [ 9.4563962e-05  3.0773198e-03 -6.8126451e-03 -1.3754654e-03
 假设你手上有一个文本库，是某个明星近 10 年发的微博的集合，你需要通过 NLP 方法，识别出哪些博文包含“打车”？你打算怎么设计？
 
 # 第三章：打入核心，挑战底层技术原理 (8讲) 12｜深入理解Word2Vec：解开词向量生成的奥秘
+![image](https://github.com/user-attachments/assets/6d02fc04-53da-45fb-826e-6415e936e656)
+
+## Word2Vec
+![image](https://github.com/user-attachments/assets/a75195d9-8af4-43db-86ec-8a6ae1116c31)
+
+## 模型架构
+![image](https://github.com/user-attachments/assets/cac9d54d-e0d4-4a5b-980f-c46113135456)
+
+## 构建自己的 Word2Vec 模型
+基于上述的架构，我们自己从 0～1 构建一个 Word2Vec 模型。
+
+### 数据收集和预处理
+我从网上下载了一个公开的[微博内容数据集](http://www.nlpir.org/wordpress/2017/12/03/nlpir%E5%BE%AE%E5%8D%9A%E5%86%85%E5%AE%B9%E8%AF%AD%E6%96%99%E5%BA%93-23%E4%B8%87%E6%9D%A1/)。我们先进行文本预处理。回想一下我们前几节课提到的方法，步骤就是数据加载 -> 去除停用词 -> 分词等等。这里我们就进行这些简单的预处理操作。
+```
+import jieba
+import xml.etree.ElementTree as ET
+
+# 读取XML文件并解析
+file_path = 'data.xml'
+tree = ET.parse(file_path)
+root = tree.getroot()
+
+# 获取所有<article>标签的内容
+texts = [record.find('article').text for record in root.findall('RECORD')]
+print(len(texts))
+
+# 停用词列表，实际应用中需要根据实际情况扩展
+stop_words = set(["的", "了", "在", "是", "我", "有", "和", "就"])
+
+# 分词和去除停用词
+processed_texts = []
+for text in texts:
+    if text is not None:
+        words = jieba.cut(text)
+        processed_text = [word for word in words if word not in stop_words]
+        processed_texts.append(processed_text)
+
+# 打印预处理后的文本
+for text in processed_texts:
+    print(text)
+```
+
+预处理完成后，产生了 40831 条数据用来训练。
+
+### 训练模型
+我们直接使用 gensim 库，这个库提供了一个简洁的 API 来训练 Word2Vec 模型。我们选择 CBOW 模型。vector_size 参数设置了词向量的维度，window 参数设置了上下文窗口的大小，min_count 参数设置了词频的最小阈值，workers 参数设置了训练的线程数，sg=1 表示使用 Skip-Gram 架构，sg=0 表示使用 CBOW 架构。你可以看一下具体的代码。
+```
+# 训练Word2Vec模型
+model = Word2Vec(sentences=processed_texts, vector_size=100, window=5, min_count=1, workers=4, sg=1)
+# 保存模型
+model.save("word2vec.model")
+```
+
+![image](https://github.com/user-attachments/assets/deba5062-22a5-4fca-b4a7-4e2d809a9623)
+
+### 评估与应用
+模型训练完成，我们可以简单看一下效果。
+```
+# 加载模型
+model = Word2Vec.load("word2vec.model")
+print("模型加载完成")
+
+# 使用模型
+# 获取一个词的向量
+print(model.wv['科技'])
+
+# 找到最相似的词
+similar_words = model.wv.most_similar('科技', topn=5)
+print(similar_words)
+```
+
+程序输出如下：
+```
+[ 0.08377746  1.4331518   0.5016794  -0.09138884 -0.1221515  -0.08544948
+  0.20863684  0.9883061  -0.26002824 -0.02130504  0.43953782 -0.11446979
+  0.4636304  -0.67642045  0.47473285 -0.4832982   0.35540286 -0.5201831
+  0.0174433  -0.40980706 -0.14922573  0.5372444   0.53256696 -0.4517828
+ -1.1696991   0.32669672 -0.34389514  0.5889707  -0.20616521 -0.20512877
+  0.6516593  -1.3999687  -0.00352089  0.422699   -0.32610646  1.5900621
+  0.8748267  -0.00933662 -0.77871656 -0.2894545   0.7261106  -0.05075585
+ -0.5845707   0.7334658  -0.22150414  0.3801838  -0.50801146 -0.8370443
+ -0.03138219  0.08028921  0.2562184  -0.49664307 -0.8038274   0.0211964
+ -0.6316118   0.12551498  0.58615136  0.467213   -0.15562508 -0.58768135
+  0.07793431  0.19536994 -0.1413024  -0.3790597   0.19154921  0.4437868
+  0.08398101  0.10911901 -0.6428759  -0.07833739 -0.8982224   0.8185256
+  0.4029754   0.05831718 -0.23952699  0.06487722 -0.6090112  -0.03935737
+ -0.1745928   0.2225394  -0.7901157  -0.08253222 -0.3205032   0.16001679
+ -0.06188322 -0.4120766  -0.55351204  1.1411817  -0.24971966  0.01067457
+  0.205598    0.4778782  -0.2214068  -0.5329161   0.9778511   0.5545867
+  0.50671256  0.6427801  -0.45557818 -0.29751778]
+[('产业', 0.9526691436767578), ('创新', 0.9492118954658508), ('生态', 0.9462338089942932), ('应用', 0.9439343810081482), ('战略', 0.9437689185142517)]
+```
+
+![image](https://github.com/user-attachments/assets/61f79df6-d68e-4e59-942f-f809a48b3212)
+
+我们采用第一种方式，来详细看一下评估过程。
+
+首先，手动创建评估数据集 [valid.tsv](https://pan.baidu.com/s/1Z8jbZJin5glccoK7hHsPsg?pwd=2vmk)，内容如下：
+
+![image](https://github.com/user-attachments/assets/5c8d84f9-d906-4054-b9a4-7219a624a70d)
+
+总共 3 列，第 1 列和第 2 列是相似词，第 3 列是我人工打的分，实际评估过程中，评估数据集可以自己基于偏好进行人工打分，同时，准备的词汇数量可以再多一些，为了节省时间，我只准备了二十来个词。数据集准备好就可以评估了。
+```
+# 加载模型
+model = Word2Vec.load("word2vec.model")
+print("模型加载完成")
+# 类比
+result = model.wv.evaluate_word_pairs("valid.tsv")
+print(result)
+```
+
+运行程序输入如下结果：
+```
+(PearsonRResult(statistic=0.5510228130115481, pvalue=0.021875787422131296), SignificanceResult(statistic=0.5076852492192858, pvalue=0.03748715633121946), 10.526315789473683)
+```
+
+![image](https://github.com/user-attachments/assets/4efb5884-06f6-49e6-81af-a27bdfefad95)
+
+![image](https://github.com/user-attachments/assets/b6f6ff92-e904-4af2-9223-dd4655e30c41)
+
+## 模型的优缺点
+为什么 Word2Vec 使用得比较广泛呢？从上面的学习过程中，我们就能看出来，Word2Vec 总体上还是比较容易理解的，上手也比较简单。这里，我们来总结下 Word2Vec 的优缺点。
+
+### 优点
+1. **词嵌入质量高**：Word2Vec 能够学习到富含语义信息的高质量词向量，使语义上相近的词在向量空间中也相近。
+2. **捕捉多种语言规律**：Word2Vec 能够捕捉到一定的语法和语义规律，比如词类比：男人之于女人如同国王之于王后。
+3. **效率高**：相比于早期的基于矩阵分解的词嵌入方法，Word2Vec 的训练效率更高，尤其是在处理大规模语料库时。
+4. **可解释性**：Word2Vec 模型学习到的词向量具有一定的可解释性，可以通过向量运算进行词之间的关系探索。
+
+### 缺点
+1. **OOV 问题**：Word2Vec 模型只能对其训练期间见过的词汇生成向量。对于新出现的或者罕见的词汇，模型无法直接提供词向量（尽管可以通过一些技巧进行处理）。
+2. **词义多样性**：Word2Vec 为每个词汇生成一个唯一的向量，因此无法直接处理一个词多种含义的情况，也就是多义词问题。
+3. **依赖于大量文本数据**：为了训练出高质量的词向量，Word2Vec 需要大量的文本数据。在数据量较小的情况下，模型的效果可能会受限。
+4. **上下文独立**：Word2Vec 生成的词向量是静态的，不考虑词在特定句子中的上下文。这与后来的上下文相关的词嵌入模型，如 ELMo、BERT 等形成对比。
+5. **缺乏层次化表示**：Word2Vec 提供的是词汇级别的向量表示，缺乏更细致的语法和语义结构信息，这些在一些复杂的 NLP 任务中可能是必需的。下面我们看下 Word2Vec 有哪些实际的应用场景。
+
+## 应用场景及案例
+Word2Vec 模型因为能够捕捉到词语和词语之间复杂的语义语法关系，所以在 NLP 任务中被广泛使用。
+
+![image](https://github.com/user-attachments/assets/4a4897d7-9838-4be2-ade7-ce63c0c38b3a)
+
+## 小结
+这节课从原理到实操讲解了 Word2Vec 模型，我们通过脑图来简单总结下这节课内容的知识点。
+
+![image](https://github.com/user-attachments/assets/caa216f4-8640-4e66-b466-cceb5e67d10c)
+
+你可以按照学习的知识自己构建一个 Word2Vec 模型，并应用到实际产品中，当然也可以使用业界已经训练好的比较成熟的 Word2Vec 模型，比如 Google 的 GoogleNews-vectors-negative300 模型，这个模型在包含大约 1000 亿个单词的 Google 新闻数据集上预训练得到，模型中的每个单词都被表示为一个 300 维的向量，模型是比较强大的。你可以试一试。
+
+## 思考题
+目前不论是电商、新闻还是社交平台，个性化推荐都很常见，如果让你来设计一个新闻推荐系统，请思考一下，怎么实现？
+
+![image](https://github.com/user-attachments/assets/e6d5e4da-6b88-4529-b5d0-4c1e72d12c9b)
+
 # 第三章：打入核心，挑战底层技术原理 (8讲) 13｜深入理解Seq2Seq：让我们看看语言翻译是怎么来的
+![image](https://github.com/user-attachments/assets/8e8e7a87-c31c-4950-abf7-461e24987134)
+
+## Seq2Seq
+
 # 第三章：打入核心，挑战底层技术原理 (8讲) 14｜Transformer技术原理：为什么说Transformer是大模型架构的基石？（上）
 # 第三章：打入核心，挑战底层技术原理 (8讲) 15｜Transformer技术原理：为什么说Transformer是大模型架构的基石？（下）
 
