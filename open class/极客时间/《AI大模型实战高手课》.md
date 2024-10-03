@@ -3001,8 +3001,120 @@ Mamba 在多个方面有出色表现，包括高效性、适应性、内存利�
 畅想一下，当人形机器人行业发展成熟后，可以为我们的生活带来什么变化？
 
 # 第五章：热点速递，AI行业发展趋势解读 (5讲) 28｜Sora的突破：揭秘AI世界模拟器背后的技术演进
+Sora 是 OpenAI 开发的一种视频生成大模型，利用先进的人工智能和虚拟现实技术，能够根据文本、图片甚至视频输入直接生成 2D 和 3D 视频。这不仅改变了视频制作的流程，还会颠覆视频观看的方式。
+
+## Sora 对视频领域的冲击
+![image](https://github.com/user-attachments/assets/34f7f97d-787a-43a1-9067-d7ba04f0fdba)
+
+## 文生视频技术难点
+![image](https://github.com/user-attachments/assets/aaa9aa52-3659-4376-ae46-59a7c9e25356)
+
+## Sora 技术演进之路
+接下来我们就来看看 Sora 是如何发展到现在这种程度的，主要是 Vision Transformer 和扩散模型发挥的作用，我汇总成了一张示意图，你先大概了解一下，下面我们细细讲解。
+
+![image](https://github.com/user-attachments/assets/6e211c4e-50f3-4511-b892-8b7e33eb6233)
+
+### 视觉转换器（ViT）
+![image](https://github.com/user-attachments/assets/31730668-e5cc-4dd7-bf88-c5ec6bd43f22)
+
+### 掩蔽自动编码器（MAE）
+![image](https://github.com/user-attachments/assets/4e17aa43-fec2-4fbf-bf4e-196566ec8757)
+
+### 原始分辨率视觉变换器（NaViT）
+![image](https://github.com/user-attachments/assets/9d5001ac-1524-479a-8c9d-45c0604b5677)
+
+### 传统 ViT 的挑战
+![image](https://github.com/user-attachments/assets/9be0eec7-0f24-4cca-84c4-0d9732d1f4b3)
+
+### NaViT 的创新
+![image](https://github.com/user-attachments/assets/c54df82f-1795-42f2-8808-54a9b381abcb)
+
+### 扩散模型
+![image](https://github.com/user-attachments/assets/b61f4cce-893f-4691-988f-be753c8ca2f1)
+
+### 潜在扩散模型
+![image](https://github.com/user-attachments/assets/a2fd32e6-bb8d-4d3e-b904-5b50b03c5d36)
+
+### 扩散 Transformer（DiT）
+![image](https://github.com/user-attachments/assets/e868ef37-50ec-413a-aafc-c59336dc295c)
+
+## Sora 核心技术
+根据官方的[技术报告】(https://openai.com/index/video-generation-models-as-world-simulators/)，Sora 使用 Transformer 结构取代了扩散模型中常用的 U-net 组件。有人总结了一个架构图，你可以参考一下。
+
+![image](https://github.com/user-attachments/assets/31d32dcb-b32b-4cb7-92dd-7267a5ec1321)
+
+里面有几个核心技术点。
+
+![image](https://github.com/user-attachments/assets/f3c2d7d3-cd64-47c0-9845-55b7076813ba)
+
+![image](https://github.com/user-attachments/assets/6aedda34-a1e0-4bac-8caf-b1608a7ebda8)
+
+## 小结
+![image](https://github.com/user-attachments/assets/ee2ebb99-855f-4529-afb8-4f6a7911aff2)
+
+## 思考题
+你可以思考一下，为什么 Sora 最多只能生成 1 分钟长度的视频？
+
+![image](https://github.com/user-attachments/assets/b8b9b07d-d070-41c4-a6fd-b8b0a18b7936)
+
 # 第五章：热点速递，AI行业发展趋势解读 (5讲) 29｜人工智能+无人机：掀起智能飞行领域革命
+![image](https://github.com/user-attachments/assets/f8d83550-097c-4538-b442-5793b6492df2)
+
+## 人工智能 + 无人机历史
+![image](https://github.com/user-attachments/assets/1e16bf32-b147-4f69-94db-b708be6e0491)
+
+## 无人机领域的痛点
+![image](https://github.com/user-attachments/assets/8e58ee2c-ec8e-4058-a101-7b3d6feebcb6)
+
+## 无人机自主性六个层级
+说起无人机，一定避不开的话题就是自主操作性，“无人”所包含的含义，不仅仅是不载人，随着计算机技术尤其是机器学习技术的演进，“无人”还有另一层含义，就是无人机的自主操作性，也就是自动化程度。有人把无人机自主性控制分为 6 个层级，我们依次来看一下。
+
+![image](https://github.com/user-attachments/assets/69669b29-147b-4b3b-9164-b679baca65c4)
+
+![image](https://github.com/user-attachments/assets/ddcd63e8-c919-4310-9c46-3f5f53ba6e94)
+
+![image](https://github.com/user-attachments/assets/2ac8fcbe-ce44-45f9-a15c-dbaa779afd58)
+
+## AI 大模型如何赋能无人机
+### 飞行控制：路径规划与导航
+![image](https://github.com/user-attachments/assets/441b65b7-6df4-442b-855a-3121ca557f1c)
+
+### 业务应用：图像和视频处理
+![image](https://github.com/user-attachments/assets/87d63445-b3d6-4c85-9be4-9f8dfde53b4a)
+
+![image](https://github.com/user-attachments/assets/3074a188-bd2f-4e34-b520-4a246983901d)
+
+## 无人机引发的社会问题
+![image](https://github.com/user-attachments/assets/0393eb1f-ddbf-45ca-8480-835a44c0a9bd)
+
+## 小结
+![image](https://github.com/user-attachments/assets/2bdb7f90-3426-47ce-b050-d379ed6b8d1c)
+
+## 思考题
+我们知道，无人机很多时候是将数据传回到服务端进行处理，那么问题来了，当无人机处于弱网环境下，怎么进行数据处理会比较好？
+
 # 第五章：热点速递，AI行业发展趋势解读 (5讲) 30｜AI发展的下一阶段：什么是Q-Star(*)？
+![image](https://github.com/user-attachments/assets/f68ebb46-ba20-44a9-b792-969f3654a3d3)
+
+## 事件起源
+![image](https://github.com/user-attachments/assets/b801a67c-7401-4e68-ab54-c2f87bf1ec57)
+
+## Q* 到底是什么？
+![image](https://github.com/user-attachments/assets/1ef41579-48b1-4cad-9afd-7bfb93f30aee)
+
+## Q-star 为何这么“恐怖”？
+![image](https://github.com/user-attachments/assets/0b3bba8a-845f-497e-9543-91c0a9981ffa)
+
+![image](https://github.com/user-attachments/assets/78761de7-146c-44f3-81ee-e43863d5802f)
+
+## 突现能力
+![image](https://github.com/user-attachments/assets/5a4b2c99-6776-41d2-bd72-051a5b57dbce)
+
+## 结论
+![image](https://github.com/user-attachments/assets/293de2cd-5134-4c43-af93-2f7e957a3479)
+
+![image](https://github.com/user-attachments/assets/4c1e5e4e-172e-4a8c-81ac-751abd38d960)
+
 # 结束语 (2讲) 结束语｜相信自己，未来无限可能
 ## 超前意识：关于人工智能 +
 ![image](https://github.com/user-attachments/assets/0c307c33-d02b-4b8f-b2cf-264fa2f53dd5)
