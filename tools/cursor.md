@@ -1,0 +1,1 @@
+- [查看一些最佳的prompt实践](https://github.com/pontusab/cursor.directory)
