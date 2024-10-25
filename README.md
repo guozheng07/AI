@@ -13,7 +13,7 @@ AI 工具大盘点 👉 https://shorturl.at/CzJgD
 
 prompt 优化：https://promptperfect.jina.ai/interactive
 
-code 编程
+code 编程:
 - [Cursor｜软件开发行业新变革](https://mp.weixin.qq.com/s/QWy3hFjsseBaCgEMzOtGRA)
 
 cursor 教程：
