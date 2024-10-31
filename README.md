@@ -25,3 +25,4 @@ cursor 教程：
 - [早早聊-资讯](https://zaozaoliao.feishu.cn/wiki/IaUSwhYZ0iVz3wkIkoCciyRan4c)
 - [AutoGpt-文章](https://autogpt.net/)
 - [极客时间-知识库](https://gp477l8icq.feishu.cn/wiki/JUXnwzSuviL5E9kh6jUc8FRinHe?ignore_wx_jump=1)
+- [通往 AGI 之路](https://waytoagi.feishu.cn/wiki/QPe5w5g7UisbEkkow8XcDmOpn8e)
