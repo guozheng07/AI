@@ -471,6 +471,349 @@ conversation.predict(input="What would be a good demo to show?")
 ![image](https://github.com/user-attachments/assets/aab15c57-f72f-467e-a0b0-05ac9d065822)
 
 ## Chains
+### 导读
+- LLMChain：这是LangChain中最基本的链类型。它将提示模板、语言模型和（可选的）输出解析器组合在一起。
+- Sequential Chains：用于将多个链按顺序连接起来的工具。
+  - SimpleSequentialChain：这是最简单的序列链，其中**每个步骤的输出直接作为下一个步骤的输入。适用于链中只有一个 input 和 一个 output**。
+  - SequentialChain：这是一个更灵活的序列链，**允许指定每个步骤的输入和输出。适用于链中有多个 input 和 多个 output**。
+- Router Chain：这是一种**可以根据输入动态选择使用哪个链**的工具。
+
+![image](https://github.com/user-attachments/assets/2776b051-c325-40fb-9daf-7e44b6bd3377)
+![image](https://github.com/user-attachments/assets/c5d1eb95-3954-461f-a350-5762839db5d3)
+![image](https://github.com/user-attachments/assets/c5079094-9731-4b64-9d95-45569ee85960)
+
+```
+import warnings
+warnings.filterwarnings('ignore')
+```
+
+```
+import os
+
+from dotenv import load_dotenv, find_dotenv
+_ = load_dotenv(find_dotenv()) # read local .env file
+```
+
+```
+# account for deprecation of LLM model
+import datetime
+# Get the current date
+current_date = datetime.datetime.now().date()
+
+# Define the date after which the model should be set to "gpt-3.5-turbo"
+target_date = datetime.date(2024, 6, 12)
+
+# Set the model variable based on the current date
+if current_date > target_date:
+    llm_model = "gpt-3.5-turbo"
+else:
+    llm_model = "gpt-3.5-turbo-0301"
+```
+
+```
+#!pip install pandas
+```
+
+```
+import pandas as pd
+df = pd.read_csv('Data.csv')
+```
+
+![image](https://github.com/user-attachments/assets/1c6b1028-deb0-49d1-a14c-fd46772d9b7d)
+
+### LLMChain
+```
+from langchain.chat_models import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.chains import LLMChain
+```
+
+```
+llm = ChatOpenAI(temperature=0.9, model=llm_model)
+```
+
+```
+prompt = ChatPromptTemplate.from_template(
+    "What is the best name to describe \
+    a company that makes {product}?"
+)
+```
+
+使用 LLMChain 将对话模型和提示模版组合在一起，形成1个链：
+```
+chain = LLMChain(llm=llm, prompt=prompt)
+```
+
+![image](https://github.com/user-attachments/assets/0099c7ab-c980-4865-9594-9345485ac275)
+
+### SimpleSequentialChain
+```
+from langchain.chains import SimpleSequentialChain
+```
+创建对话模型和链1：
+```
+llm = ChatOpenAI(temperature=0.9, model=llm_model)
+
+# prompt template 1
+first_prompt = ChatPromptTemplate.from_template(
+    "What is the best name to describe \
+    a company that makes {product}?"
+)
+
+# Chain 1
+chain_one = LLMChain(llm=llm, prompt=first_prompt)
+```
+创建链2：
+```
+# prompt template 2
+second_prompt = ChatPromptTemplate.from_template(
+    "Write a 20 words description for the following \
+    company:{company_name}"
+)
+# chain 2
+chain_two = LLMChain(llm=llm, prompt=second_prompt)
+```
+通过 SimpleSequentialChain，将链1和链2组合（链1输出的公司名称输入给链2）
+```
+overall_simple_chain = SimpleSequentialChain(chains=[chain_one, chain_two],
+                                             verbose=True
+                                            )
+```
+
+![image](https://github.com/user-attachments/assets/d88bb4cf-51a6-40c1-ae09-ee290a74154a)
+
+### SequentialChain
+```
+from langchain.chains import SequentialChain
+```
+
+示例：将4个链进行组合
+
+#### 方式一：手动调用链，每次通过调用 LLMChain 的 prompt 中指定输入，output_key 指定输出
+创建对话模型和链1：
+```
+llm = ChatOpenAI(temperature=0.9, model=llm_model)
+
+# prompt template 1: translate to english
+first_prompt = ChatPromptTemplate.from_template(
+    "Translate the following review to english:"
+    "\n\n{Review}"
+)
+# chain 1: 输入为 Review，用 output_key 指定输出为 English_Review
+chain_one = LLMChain(llm=llm, prompt=first_prompt, 
+                     output_key="English_Review"
+                    )
+```
+创建链2：
+```
+second_prompt = ChatPromptTemplate.from_template(
+    "Can you summarize the following review in 1 sentence:"
+    "\n\n{English_Review}"
+)
+# chain 2: 输入为链1的输出 English_Review，输出为 summary
+chain_two = LLMChain(llm=llm, prompt=second_prompt, 
+                     output_key="summary"
+                    )
+```
+创建链3：
+```
+# prompt template 3: translate to english
+third_prompt = ChatPromptTemplate.from_template(
+    "What language is the following review:\n\n{Review}"
+)
+# chain 3: 输入为 Review，输出为 language
+chain_three = LLMChain(llm=llm, prompt=third_prompt,
+                       output_key="language"
+                      )
+```
+创建链4：
+```
+# prompt template 4: follow up message
+fourth_prompt = ChatPromptTemplate.from_template(
+    "Write a follow up response to the following "
+    "summary in the specified language:"
+    "\n\nSummary: {summary}\n\nLanguage: {language}"
+)
+# chain 4: 输入为链2的输出 summary 和链3的输出 language，输出为 followup_message
+chain_four = LLMChain(llm=llm, prompt=fourth_prompt,
+                      output_key="followup_message"
+                     )
+```
+
+#### 方式二：SequentialChain 的 chains 指定链的调用关系，input_variables 定义初始输入，output_variables 定义中间输出（只要变量名匹配）
+```
+# overall_chain: input= Review 
+# and output= English_Review,summary, followup_message
+overall_chain = SequentialChain(
+    chains=[chain_one, chain_two, chain_three, chain_four],
+    input_variables=["Review"],
+    output_variables=["English_Review", "summary","followup_message"],
+    verbose=True
+)
+```
+
+输出结果：
+![image](https://github.com/user-attachments/assets/13623b77-6582-42c3-8208-c6fd78046259)
+
+### Router Chain
+```
+physics_template = """You are a very smart physics professor. \
+You are great at answering questions about physics in a concise\
+and easy to understand manner. \
+When you don't know the answer to a question you admit\
+that you don't know.
+
+Here is a question:
+{input}"""
+
+
+math_template = """You are a very good mathematician. \
+You are great at answering math questions. \
+You are so good because you are able to break down \
+hard problems into their component parts, 
+answer the component parts, and then put them together\
+to answer the broader question.
+
+Here is a question:
+{input}"""
+
+history_template = """You are a very good historian. \
+You have an excellent knowledge of and understanding of people,\
+events and contexts from a range of historical periods. \
+You have the ability to think, reflect, debate, discuss and \
+evaluate the past. You have a respect for historical evidence\
+and the ability to make use of it to support your explanations \
+and judgements.
+
+Here is a question:
+{input}"""
+
+
+computerscience_template = """ You are a successful computer scientist.\
+You have a passion for creativity, collaboration,\
+forward-thinking, confidence, strong problem-solving capabilities,\
+understanding of theories and algorithms, and excellent communication \
+skills. You are great at answering coding questions. \
+You are so good because you know how to solve a problem by \
+describing the solution in imperative steps \
+that a machine can easily interpret and you know how to \
+choose a solution that has a good balance between \
+time complexity and space complexity. 
+
+Here is a question:
+{input}"""
+```
+
+```
+prompt_infos = [
+    {
+        "name": "physics", 
+        "description": "Good for answering questions about physics", 
+        "prompt_template": physics_template
+    },
+    {
+        "name": "math", 
+        "description": "Good for answering math questions", 
+        "prompt_template": math_template
+    },
+    {
+        "name": "History", 
+        "description": "Good for answering history questions", 
+        "prompt_template": history_template
+    },
+    {
+        "name": "computer science", 
+        "description": "Good for answering computer science questions", 
+        "prompt_template": computerscience_template
+    }
+]
+```
+
+```
+from langchain.chains.router import MultiPromptChain
+from langchain.chains.router.llm_router import LLMRouterChain,RouterOutputParser
+from langchain.prompts import PromptTemplate
+```
+
+```
+llm = ChatOpenAI(temperature=0, model=llm_model)
+```
+
+```
+destination_chains = {}
+for p_info in prompt_infos:
+    name = p_info["name"]
+    prompt_template = p_info["prompt_template"]
+    prompt = ChatPromptTemplate.from_template(template=prompt_template)
+    chain = LLMChain(llm=llm, prompt=prompt)
+    destination_chains[name] = chain  
+    
+destinations = [f"{p['name']}: {p['description']}" for p in prompt_infos]
+destinations_str = "\n".join(destinations)
+```
+
+```
+default_prompt = ChatPromptTemplate.from_template("{input}")
+default_chain = LLMChain(llm=llm, prompt=default_prompt)
+```
+
+```
+MULTI_PROMPT_ROUTER_TEMPLATE = """Given a raw text input to a \
+language model select the model prompt best suited for the input. \
+You will be given the names of the available prompts and a \
+description of what the prompt is best suited for. \
+You may also revise the original input if you think that revising\
+it will ultimately lead to a better response from the language model.
+
+<< FORMATTING >>
+Return a markdown code snippet with a JSON object formatted to look like:
+```json
+{{{{
+    "destination": string \ name of the prompt to use or "DEFAULT"
+    "next_inputs": string \ a potentially modified version of the original input
+}}}}
+```
+
+REMEMBER: "destination" MUST be one of the candidate prompt \
+names specified below OR it can be "DEFAULT" if the input is not\
+well suited for any of the candidate prompts.
+REMEMBER: "next_inputs" can just be the original input \
+if you don't think any modifications are needed.
+
+<< CANDIDATE PROMPTS >>
+{destinations}
+
+<< INPUT >>
+{{input}}
+
+<< OUTPUT (remember to include the ```json)>>"""
+```
+
+```
+router_template = MULTI_PROMPT_ROUTER_TEMPLATE.format(
+    destinations=destinations_str
+)
+router_prompt = PromptTemplate(
+    template=router_template,
+    input_variables=["input"],
+    output_parser=RouterOutputParser(),
+)
+
+router_chain = LLMRouterChain.from_llm(llm, router_prompt)
+```
+
+```
+chain = MultiPromptChain(router_chain=router_chain, 
+                         destination_chains=destination_chains, 
+                         default_chain=default_chain, verbose=True
+                        )
+```
+
+```
+chain.run("What is black body radiation?")
+chain.run("what is 2 + 2")
+chain.run("Why does every cell in our body contain DNA?")
+```
 
 ## Question and Answer
 
