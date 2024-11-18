@@ -1,4 +1,4 @@
-# 课程地址
+![image](https://github.com/user-attachments/assets/3d5075cc-d764-427e-8ea5-31166fc2b395)# 课程地址
 https://learn.deeplearning.ai/courses/langchain/lesson/1/introduction
 
 # 课程内容
@@ -282,12 +282,25 @@ output_dict.get('delivery_days')
 
 ## Memory
 ### 概述
+langchain 提供以下用于来存储和积累对话的便捷内存：
 - ConversationBufferMemory
+  - 这是最简单的内存类型。
+  - 它会存储所有的对话历史，不做任何过滤或压缩。
+  - 适用于需要完整对话历史的场景，但在长对话中可能会导致内存占用过大。
 - ConversationBufferWindowMemory
+  - **这种内存类型只保存最近的 N 条对话**。
+  - 它通过滑动窗口的方式管理对话历史，旧的对话会被丢弃。
+  - 适用于只需要最近上下文的场景，可以有效控制内存使用。
 - ConversationTokenBufferMemory
+  - **这种内存类型基于 token 数量来限制存储的对话历史**。
+  - 它会计算对话历史的 token 数，并在达到限制时删除最早的对话。
+  - 适用于需要精确控制输入 token 数量的场景，特别是在使用有 token 限制的模型时。
 - ConversationSummaryMemory
+  - **这种内存类型会对对话历史进行摘要，也会限制 token 数量**。
+  - 它使用语言模型来生成对话的摘要，而不是存储完整的对话历史。
+  - 适用于需要长期记忆但又不想存储大量原始对话的场景。
 
-### ConversationBufferMemory¶
+### ConversationBufferMemory
 ```
 import os
 
@@ -348,19 +361,22 @@ memory.load_memory_variables({})
 ```
 ![image](https://github.com/user-attachments/assets/0cf46f2e-6c77-4ebe-87cd-29474a46c1dd)
 
+使用 ConversationBufferMemory 创建新的内存，并使用 save_context 方法添加新的上下文到内存
 ```
 memory = ConversationBufferMemory()
 memory.save_context({"input": "Hi"}, 
                     {"output": "What's up"})
-print(memory.buffer)
 ```
 
-```
-memory.load_memory_variables({})
-memory.save_context({"input": "Not much, just hanging"}, 
-                    {"output": "Cool"})
-memory.load_memory_variables({})
-```
+![image](https://github.com/user-attachments/assets/48b922ea-e266-43c6-bb46-f73754ffdad4)
+
+![image](https://github.com/user-attachments/assets/358699e4-6e68-4254-94c1-eb3506d33950)
+
+### 总结
+大语言模型本身是“无状态的”。
+- 每轮对话都是独立的。
+
+chatbots/聊天机器人拥有记忆是通过提供完成的对话作为上下文。
 
 ### ConversationBufferWindowMemory
 ```
@@ -368,6 +384,7 @@ from langchain.memory import ConversationBufferWindowMemory
 ```
 
 ```
+# 参数1代表只记忆一次对话交流
 memory = ConversationBufferWindowMemory(k=1)         
 ```
 
@@ -377,26 +394,10 @@ memory.save_context({"input": "Hi"},
 memory.save_context({"input": "Not much, just hanging"},
                     {"output": "Cool"})
 ```
+![image](https://github.com/user-attachments/assets/05f2bb07-0b4c-4e53-86fe-e150bc09cda7)
 
-```
-memory.load_memory_variables({})
-```
-
-```
-llm = ChatOpenAI(temperature=0.0, model=llm_model)
-memory = ConversationBufferWindowMemory(k=1)
-conversation = ConversationChain(
-    llm=llm, 
-    memory = memory,
-    verbose=False
-)
-```
-
-```
-conversation.predict(input="Hi, my name is Andrew")
-conversation.predict(input="What is 1+1?")
-conversation.predict(input="What is my name?")
-```
+示例（第三轮对话忘记了第一轮对话中的名字）：
+![image](https://github.com/user-attachments/assets/50c0eac8-7225-47e1-96a4-79af077f5725)
 
 ### ConversationTokenBufferMemory
 ```
@@ -410,6 +411,7 @@ llm = ChatOpenAI(temperature=0.0, model=llm_model)
 ```
 
 ```
+# 设置最大 token 是50
 memory = ConversationTokenBufferMemory(llm=llm, max_token_limit=50)
 memory.save_context({"input": "AI is what?!"},
                     {"output": "Amazing!"})
@@ -418,10 +420,8 @@ memory.save_context({"input": "Backpropagation is what?"},
 memory.save_context({"input": "Chatbots are what?"}, 
                     {"output": "Charming!"})
 ```
-
-```
-memory.load_memory_variables({})
-```
+内存只保留了最新的对话内容（token 为50）
+![image](https://github.com/user-attachments/assets/0257607a-21a2-4afd-af72-408deda8fdbf)
 
 ### ConversationSummaryMemory
 ```
@@ -438,6 +438,7 @@ At Noon, lunch at the italian resturant with a customer who is driving \
 from over an hour away to meet you to understand the latest in AI. \
 Be sure to bring your laptop to show the latest LLM demo."
 
+# token 数量为 100
 memory = ConversationSummaryBufferMemory(llm=llm, max_token_limit=100)
 memory.save_context({"input": "Hello"}, {"output": "What's up"})
 memory.save_context({"input": "Not much, just hanging"},
@@ -445,26 +446,23 @@ memory.save_context({"input": "Not much, just hanging"},
 memory.save_context({"input": "What is on the schedule today?"}, 
                     {"output": f"{schedule}"})
 ```
+三轮对话的 token 超出了 100，可以看到截取最大 token 为 100 的内容时，只保留了第三轮对话的输出，并生成了摘要（非原文）
+![image](https://github.com/user-attachments/assets/98d81c2b-6d6f-4922-a1a1-db491a1ccdca)
 
-```
-memory.load_memory_variables({})
-```
-
+建立会话，验证只保留了上述截图中 100 个 token 的上下文（verbose 设置为 true，可以看到具体信息）
 ```
 conversation = ConversationChain(
     llm=llm, 
     memory = memory,
     verbose=True
 )
-```
-
-```
 conversation.predict(input="What would be a good demo to show?")
 ```
+在回答前，记录的对话（之前的内容）和输出：
+![image](https://github.com/user-attachments/assets/b9ba3c3d-a5d7-43f3-b491-6d246a70db6c)
 
-```
-memory.load_memory_variables({})
-```
+回答后的对话为（新的内容）：
+![image](https://github.com/user-attachments/assets/08811906-2dde-4db7-8994-dda698d7279a)
 
 ## Chains
 
