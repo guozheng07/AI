@@ -656,7 +656,9 @@ overall_chain = SequentialChain(
 ![image](https://github.com/user-attachments/assets/13623b77-6582-42c3-8208-c6fd78046259)
 
 ### Router Chain
+4个模版
 ```
+# 处理物理问题
 physics_template = """You are a very smart physics professor. \
 You are great at answering questions about physics in a concise\
 and easy to understand manner. \
@@ -666,7 +668,7 @@ that you don't know.
 Here is a question:
 {input}"""
 
-
+# 处理数学问题
 math_template = """You are a very good mathematician. \
 You are great at answering math questions. \
 You are so good because you are able to break down \
@@ -677,6 +679,7 @@ to answer the broader question.
 Here is a question:
 {input}"""
 
+# 处理历史问题
 history_template = """You are a very good historian. \
 You have an excellent knowledge of and understanding of people,\
 events and contexts from a range of historical periods. \
@@ -688,7 +691,7 @@ and judgements.
 Here is a question:
 {input}"""
 
-
+# 处理计算机科学问题
 computerscience_template = """ You are a successful computer scientist.\
 You have a passion for creativity, collaboration,\
 forward-thinking, confidence, strong problem-solving capabilities,\
@@ -703,7 +706,7 @@ time complexity and space complexity.
 Here is a question:
 {input}"""
 ```
-
+4个模版的描述
 ```
 prompt_infos = [
     {
@@ -739,7 +742,9 @@ from langchain.prompts import PromptTemplate
 llm = ChatOpenAI(temperature=0, model=llm_model)
 ```
 
+**步骤一：获取目标链信息**
 ```
+# 目标链集合
 destination_chains = {}
 for p_info in prompt_infos:
     name = p_info["name"]
@@ -751,13 +756,13 @@ for p_info in prompt_infos:
 destinations = [f"{p['name']}: {p['description']}" for p in prompt_infos]
 destinations_str = "\n".join(destinations)
 ```
-
+**步骤二：设置默认链**
 ```
 default_prompt = ChatPromptTemplate.from_template("{input}")
 default_chain = LLMChain(llm=llm, prompt=default_prompt)
 ```
-
-```
+**步骤三：在不同链之前定义 LLM to route 使用的模版（根据输入内容选择合适的链），包含要完成的任务的说明，以及输出应采用特定格式**
+~~~
 MULTI_PROMPT_ROUTER_TEMPLATE = """Given a raw text input to a \
 language model select the model prompt best suited for the input. \
 You will be given the names of the available prompts and a \
@@ -787,21 +792,23 @@ if you don't think any modifications are needed.
 {{input}}
 
 << OUTPUT (remember to include the ```json)>>"""
+~~~
+**步骤四：创建 Router 链**
 ```
-
-```
+#通过 format 创建完成的路由器模版，代替上述定义的目标链集合 destinations
 router_template = MULTI_PROMPT_ROUTER_TEMPLATE.format(
     destinations=destinations_str
 )
+#基于路由器模版创建 prompt 模版
 router_prompt = PromptTemplate(
     template=router_template,
     input_variables=["input"],
-    output_parser=RouterOutputParser(),
+    output_parser=RouterOutputParser(), # RouterOutputParser 解析路由链的输出，确定下一步应该执行哪个链或操作
 )
-
+#通过 LLMRouterChain 创建 Router 链
 router_chain = LLMRouterChain.from_llm(llm, router_prompt)
 ```
-
+**步骤五：通过 MultiPromptChain 创建完整链条**（Router 链、目标链和默认链）
 ```
 chain = MultiPromptChain(router_chain=router_chain, 
                          destination_chains=destination_chains, 
@@ -809,11 +816,14 @@ chain = MultiPromptChain(router_chain=router_chain,
                         )
 ```
 
-```
-chain.run("What is black body radiation?")
-chain.run("what is 2 + 2")
-chain.run("Why does every cell in our body contain DNA?")
-```
+问一个物理问题，找到物理链：
+![image](https://github.com/user-attachments/assets/63babfb8-53a0-4805-b4c0-14eecc483383)
+
+问一个数学问题，找到数学链：
+![image](https://github.com/user-attachments/assets/b99f81f6-a362-4dc5-b122-81e821302914)
+
+问一个生物问题，找到默认链：
+![image](https://github.com/user-attachments/assets/13bac869-8df9-46b6-8c96-6ef7bd79dd40)
 
 ## Question and Answer
 
