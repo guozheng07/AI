@@ -742,7 +742,7 @@ from langchain.prompts import PromptTemplate
 llm = ChatOpenAI(temperature=0, model=llm_model)
 ```
 
-**步骤一：获取目标链信息**
+**步骤1：获取目标链信息**
 ```
 # 目标链集合
 destination_chains = {}
@@ -756,12 +756,12 @@ for p_info in prompt_infos:
 destinations = [f"{p['name']}: {p['description']}" for p in prompt_infos]
 destinations_str = "\n".join(destinations)
 ```
-**步骤二：设置默认链**
+**步骤2：设置默认链**
 ```
 default_prompt = ChatPromptTemplate.from_template("{input}")
 default_chain = LLMChain(llm=llm, prompt=default_prompt)
 ```
-**步骤三：在不同链之前定义 LLM to route 使用的模版（根据输入内容选择合适的链），包含要完成的任务的说明，以及输出应采用特定格式**
+**步骤3：在不同链之前定义 LLM to route 使用的模版（根据输入内容选择合适的链），包含要完成的任务的说明，以及输出应采用特定格式**
 ~~~
 MULTI_PROMPT_ROUTER_TEMPLATE = """Given a raw text input to a \
 language model select the model prompt best suited for the input. \
@@ -793,22 +793,22 @@ if you don't think any modifications are needed.
 
 << OUTPUT (remember to include the ```json)>>"""
 ~~~
-**步骤四：创建 Router 链**
+**步骤4：创建 Router 链**
 ```
-#通过 format 创建完成的路由器模版，代替上述定义的目标链集合 destinations
+# 通过 format 创建完成的路由器模版，代替上述定义的目标链集合 destinations
 router_template = MULTI_PROMPT_ROUTER_TEMPLATE.format(
     destinations=destinations_str
 )
-#基于路由器模版创建 prompt 模版
+# 基于路由器模版创建 prompt 模版
 router_prompt = PromptTemplate(
     template=router_template,
     input_variables=["input"],
     output_parser=RouterOutputParser(), # RouterOutputParser 解析路由链的输出，确定下一步应该执行哪个链或操作
 )
-#通过 LLMRouterChain 创建 Router 链
+# 通过 LLMRouterChain 创建 Router 链
 router_chain = LLMRouterChain.from_llm(llm, router_prompt)
 ```
-**步骤五：通过 MultiPromptChain 创建完整链条**（Router 链、目标链和默认链）
+**步骤5：通过 MultiPromptChain 创建完整链条**（Router 链、目标链和默认链）
 ```
 chain = MultiPromptChain(router_chain=router_chain, 
                          destination_chains=destination_chains, 
@@ -826,6 +826,203 @@ chain = MultiPromptChain(router_chain=router_chain,
 ![image](https://github.com/user-attachments/assets/13bac869-8df9-46b6-8c96-6ef7bd79dd40)
 
 ## Question and Answer
+## LangChain: Q&A over Documents
+```
+#pip install --upgrade langchain
+```
+
+```
+import os
+
+from dotenv import load_dotenv, find_dotenv
+_ = load_dotenv(find_dotenv()) # read local .env file
+```
+
+```
+# account for deprecation of LLM model
+import datetime
+# Get the current date
+current_date = datetime.datetime.now().date()
+
+# Define the date after which the model should be set to "gpt-3.5-turbo"
+target_date = datetime.date(2024, 6, 12)
+
+# Set the model variable based on the current date
+if current_date > target_date:
+    llm_model = "gpt-3.5-turbo"
+else:
+    llm_model = "gpt-3.5-turbo-0301"
+```
+
+```
+# 导入了 RetrievalQA 链，它是一个用于问答任务的高级抽象。
+from langchain.chains import RetrievalQA
+# 导入了 ChatOpenAI 模型，它是一个封装了 OpenAI 聊天模型的接口。
+from langchain.chat_models import ChatOpenAI
+# 导入了 CSVLoader，用于加载 CSV 文件中的数据。
+from langchain.document_loaders import CSVLoader
+# 导入了 DocArrayInMemorySearch，它是一个内存中的向量存储，用于存储和检索文档嵌入。
+from langchain.vectorstores import DocArrayInMemorySearch
+# 导入了用于在 Jupyter notebook 中显示内容的函数。
+from IPython.display import display, Markdown
+# 导入了 OpenAI 语言模型。
+from langchain.llms import OpenAI
+```
+解析文件：
+```
+file = 'OutdoorClothingCatalog_1000.csv'
+loader = CSVLoader(file_path=file)
+```
+导入一个索引 VectorstoreIndexCreator：
+```
+from langchain.indexes import VectorstoreIndexCreator
+```
+
+```
+# pip install docarray
+```
+创建一个 vector store：
+```
+index = VectorstoreIndexCreator(
+    vectorstore_cls=DocArrayInMemorySearch
+).from_loaders([loader])
+```
+询问的问题：
+```
+query ="Please list all your shirts with sun protection \
+in a table in markdown and summarize each one.
+```
+使用 index.query 创建响应并传入 query 查询
+```
+llm_replacement_model = OpenAI(temperature=0, 
+                               model='gpt-3.5-turbo-instruct')
+
+response = index.query(query, 
+                       llm = llm_replacement_model)
+```
+
+![image](https://github.com/user-attachments/assets/4c0bdfd3-38ae-401a-9a02-57f5c6778b71)
+
+**上述问答系统的实现依赖于嵌入向量和向量存储**：
+
+![image](https://github.com/user-attachments/assets/14637556-32b6-427d-aa3e-2cac48f7f4d8)
+
+![image](https://github.com/user-attachments/assets/2d9fad10-e6eb-4395-9a3a-c5e83fe42646)
+
+![image](https://github.com/user-attachments/assets/ecac3600-8cfc-419e-b215-b6c9c8674dbb)
+
+下面一步步实现该过程：
+
+### Step By Step
+**步骤1：解析文件**
+```
+from langchain.document_loaders import CSVLoader
+loader = CSVLoader(file_path=file)
+```
+
+**步骤2：加载文件内容**
+```
+docs = loader.load()
+```
+查看文件内容（文件很小，不用做分块）：
+```
+docs[0]
+```
+![image](https://github.com/user-attachments/assets/fc5468d1-87cc-4164-a4b1-bffb028053ab)
+
+**步骤3：引入嵌入向量**
+```
+from langchain.embeddings import OpenAIEmbeddings
+embeddings = OpenAIEmbeddings()
+```
+
+示例：使用 embed_query 创建一个特定文本的嵌入（观察发生了什么）
+```
+embed = embeddings.embed_query("Hi my name is Harrison")
+```
+
+查看整体嵌入内容的长度，及本次嵌入的内容（5个词汇对应 embed 中最后5个元素）
+![image](https://github.com/user-attachments/assets/15315146-58f0-4c19-95e8-32a56dde101d)
+
+**步骤4：通过 DocArrayInMemorySearch 进行向量存储**
+```
+# 对文档进行整体向量存储
+db = DocArrayInMemorySearch.from_documents(
+    docs, 
+    embeddings
+)
+```
+**步骤5：使用向量存储来查找文本片段**
+```
+query = "Please suggest a shirt with sunblocking"
+docs = db.similarity_search(query)
+```
+
+查看结果：返回了4个文档
+![image](https://github.com/user-attachments/assets/caf7b528-45a6-4ba7-8451-d678eca85c78)
+
+**步骤6：创建一个基于该向量存储的检索器**
+```
+retriever = db.as_retriever()
+```
+
+**步骤7：创建 chat 模型**
+```
+llm = ChatOpenAI(temperature = 0.0, model=llm_model)
+```
+
+**步骤8：将响应的文档合并成一段文本，并进行 chat 模型输出**
+```
+qdocs = "".join([docs[i].page_content for i in range(len(docs))])
+
+response = llm.call_as_llm(f"{qdocs} Question: Please list all your \
+shirts with sun protection in a table in markdown and summarize each one.") 
+```
+
+![image](https://github.com/user-attachments/assets/8377b9cd-cf84-4af3-bab5-4a58d396c6db)
+
+**步骤9：创建了一个基于"stuff"链类型的检索问答（RetrievalQA）系统**
+```
+qa_stuff = RetrievalQA.from_chain_type(
+    llm=llm,
+    # "stuff"链类型将所有相关文档合并成一个单一的上下文，然后将这个上下文和问题一起传递给语言模型
+    chain_type="stuff", 
+    retriever=retriever, 
+    verbose=True
+)
+```
+
+![image](https://github.com/user-attachments/assets/9d265817-9442-4cd4-911c-169acb59fa0b)
+
+```
+query =  "Please list all your shirts with sun protection in a table \
+in markdown and summarize each one."
+
+response = qa_stuff.run(query)
+
+display(Markdown(response))
+```
+
+### 扩展
+上述文档较小，没有进行分块，因此用了 **stuff** 方法。**如果文档有分块，怎么在不同块中获取答案**？用以下方法：
+- **Map_reduce**
+- **Refine**
+- **Map_rerank**
+
+![image](https://github.com/user-attachments/assets/cedbfc29-3071-4917-9d8c-b93d2271be22)
+
+- stuff
+  - 最简单的策略，将所有文档内容合并成一个大的上下文。
+  - 适用于处理少量或较短的文档。
+- Map_reduce
+  - 这种策略首先对每个文档单独应用LLM，然后将结果合并。
+  - 适用于处理大量文档或长文档。
+- Refine
+  - 这种策略逐步处理每个文档，不断完善答案。
+  - 适用于需要综合考虑多个文档的情况。
+- Map_rerank
+  - 这种策略对每个文档单独生成答案，然后对结果进行重新排序。
+  - 适用于需要从多个可能的答案中选择最佳答案的情况。
 
 ## Evaluation
 
