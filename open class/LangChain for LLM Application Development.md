@@ -464,6 +464,12 @@ conversation.predict(input="What would be a good demo to show?")
 回答后的对话为（新的内容）：
 ![image](https://github.com/user-attachments/assets/08811906-2dde-4db7-8994-dda698d7279a)
 
+### 总结
+1. 除了上述4种内存类型，langchain 实际上也支持其他内存类型：其中最强大的是**向量数据库**，使用该方式可以检索内存中最相关的文本块。
+2. langchain 还支持**实体记忆**，可以记忆有关特定人员、特定其他实体的详细信息。
+
+![image](https://github.com/user-attachments/assets/aab15c57-f72f-467e-a0b0-05ac9d065822)
+
 ## Chains
 
 ## Question and Answer
