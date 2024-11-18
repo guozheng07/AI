@@ -240,7 +240,7 @@ output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
 format_instructions = output_parser.get_format_instructions()
 print(format_instructions)
 ```
-新的评论模版
+新的评论模版（包括格式指令）&输入信息
 ```
 review_template_2 = """\
 For the following text, extract the following information:
@@ -264,23 +264,207 @@ prompt = ChatPromptTemplate.from_template(template=review_template_2)
 messages = prompt.format_messages(text=customer_review, 
                                 format_instructions=format_instructions)
 ```
-
+输出信息（json字符串）
 ```
 response = chat(messages)
 print(response.content)
 ```
-
+使用 output_parser 进行解析，得到 json
 ```
 output_dict = output_parser.parse(response.content)
 output_dict
 ```
-
+格式为 dict，可以正常获取 delivery_days 的值
 ```
 type(output_dict)
 output_dict.get('delivery_days')
 ```
 
 ## Memory
+### 概述
+- ConversationBufferMemory
+- ConversationBufferWindowMemory
+- ConversationTokenBufferMemory
+- ConversationSummaryMemory
+
+### ConversationBufferMemory¶
+```
+import os
+
+from dotenv import load_dotenv, find_dotenv
+_ = load_dotenv(find_dotenv()) # read local .env file
+
+import warnings
+warnings.filterwarnings('ignore')
+```
+
+```
+# account for deprecation of LLM model
+import datetime
+# Get the current date
+current_date = datetime.datetime.now().date()
+
+# Define the date after which the model should be set to "gpt-3.5-turbo"
+target_date = datetime.date(2024, 6, 12)
+
+# Set the model variable based on the current date
+if current_date > target_date:
+    llm_model = "gpt-3.5-turbo"
+else:
+    llm_model = "gpt-3.5-turbo-0301"
+```
+
+```
+from langchain.chat_models import ChatOpenAI
+from langchain.chains import ConversationChain
+from langchain.memory import ConversationBufferMemory
+```
+
+```
+llm = ChatOpenAI(temperature=0.0, model=llm_model)
+memory = ConversationBufferMemory()
+conversation = ConversationChain(
+    llm=llm, 
+    memory = memory,
+    verbose=True
+)
+```
+
+```
+conversation.predict(input="Hi, my name is Andrew")
+conversation.predict(input="What is 1+1?")
+conversation.predict(input="What is my name?")
+```
+第三轮对话时，可以记住前两轮的对话：
+![image](https://github.com/user-attachments/assets/49caf06c-9811-4076-8d50-fbca2b066b4e)
+
+```
+print(memory.buffer)
+```
+![image](https://github.com/user-attachments/assets/8b6b7567-0ab2-4c4f-a97b-8ab27215b478)
+
+```
+memory.load_memory_variables({})
+```
+![image](https://github.com/user-attachments/assets/0cf46f2e-6c77-4ebe-87cd-29474a46c1dd)
+
+```
+memory = ConversationBufferMemory()
+memory.save_context({"input": "Hi"}, 
+                    {"output": "What's up"})
+print(memory.buffer)
+```
+
+```
+memory.load_memory_variables({})
+memory.save_context({"input": "Not much, just hanging"}, 
+                    {"output": "Cool"})
+memory.load_memory_variables({})
+```
+
+### ConversationBufferWindowMemory
+```
+from langchain.memory import ConversationBufferWindowMemory
+```
+
+```
+memory = ConversationBufferWindowMemory(k=1)         
+```
+
+```
+memory.save_context({"input": "Hi"},
+                    {"output": "What's up"})
+memory.save_context({"input": "Not much, just hanging"},
+                    {"output": "Cool"})
+```
+
+```
+memory.load_memory_variables({})
+```
+
+```
+llm = ChatOpenAI(temperature=0.0, model=llm_model)
+memory = ConversationBufferWindowMemory(k=1)
+conversation = ConversationChain(
+    llm=llm, 
+    memory = memory,
+    verbose=False
+)
+```
+
+```
+conversation.predict(input="Hi, my name is Andrew")
+conversation.predict(input="What is 1+1?")
+conversation.predict(input="What is my name?")
+```
+
+### ConversationTokenBufferMemory
+```
+#!pip install tiktoken
+```
+
+```
+from langchain.memory import ConversationTokenBufferMemory
+from langchain.llms import OpenAI
+llm = ChatOpenAI(temperature=0.0, model=llm_model)
+```
+
+```
+memory = ConversationTokenBufferMemory(llm=llm, max_token_limit=50)
+memory.save_context({"input": "AI is what?!"},
+                    {"output": "Amazing!"})
+memory.save_context({"input": "Backpropagation is what?"},
+                    {"output": "Beautiful!"})
+memory.save_context({"input": "Chatbots are what?"}, 
+                    {"output": "Charming!"})
+```
+
+```
+memory.load_memory_variables({})
+```
+
+### ConversationSummaryMemory
+```
+from langchain.memory import ConversationSummaryBufferMemory
+```
+
+```
+# create a long string
+schedule = "There is a meeting at 8am with your product team. \
+You will need your powerpoint presentation prepared. \
+9am-12pm have time to work on your LangChain \
+project which will go quickly because Langchain is such a powerful tool. \
+At Noon, lunch at the italian resturant with a customer who is driving \
+from over an hour away to meet you to understand the latest in AI. \
+Be sure to bring your laptop to show the latest LLM demo."
+
+memory = ConversationSummaryBufferMemory(llm=llm, max_token_limit=100)
+memory.save_context({"input": "Hello"}, {"output": "What's up"})
+memory.save_context({"input": "Not much, just hanging"},
+                    {"output": "Cool"})
+memory.save_context({"input": "What is on the schedule today?"}, 
+                    {"output": f"{schedule}"})
+```
+
+```
+memory.load_memory_variables({})
+```
+
+```
+conversation = ConversationChain(
+    llm=llm, 
+    memory = memory,
+    verbose=True
+)
+```
+
+```
+conversation.predict(input="What would be a good demo to show?")
+```
+
+```
+memory.load_memory_variables({})
+```
 
 ## Chains
 
