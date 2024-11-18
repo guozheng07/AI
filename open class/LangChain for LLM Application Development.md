@@ -1012,20 +1012,311 @@ display(Markdown(response))
 ![image](https://github.com/user-attachments/assets/cedbfc29-3071-4917-9d8c-b93d2271be22)
 
 - stuff
-  - 最简单的策略，将所有文档内容合并成一个大的上下文。
+  - **最简单的策略，将所有文档内容合并成一个大的上下文**。
   - 适用于处理少量或较短的文档。
 - Map_reduce
-  - 这种策略首先对每个文档单独应用LLM，然后将结果合并。
+  - **这种策略首先对每个文档单独应用LLM，然后将结果合并**。
   - 适用于处理大量文档或长文档。
 - Refine
-  - 这种策略逐步处理每个文档，不断完善答案。
+  - **这种策略逐步处理每个文档，不断完善答案**，例如申诉原因分类（聚合成不同的一级、二级原因）。
   - 适用于需要综合考虑多个文档的情况。
 - Map_rerank
-  - 这种策略对每个文档单独生成答案，然后对结果进行重新排序。
+  - **这种策略对每个文档单独生成答案，然后对结果进行重新排序**。
   - 适用于需要从多个可能的答案中选择最佳答案的情况。
 
 ## Evaluation
+### 导读
+评估应用程序的表现：
+- Example generation
+- Manual evaluation (and debuging)
+- LLM-assisted evaluation
+- LangChain evaluation platform
+
+```
+import os
+
+from dotenv import load_dotenv, find_dotenv
+_ = load_dotenv(find_dotenv()) # read local .env file
+```
+
+```
+# account for deprecation of LLM model
+import datetime
+# Get the current date
+current_date = datetime.datetime.now().date()
+
+# Define the date after which the model should be set to "gpt-3.5-turbo"
+target_date = datetime.date(2024, 6, 12)
+
+# Set the model variable based on the current date
+if current_date > target_date:
+    llm_model = "gpt-3.5-turbo"
+else:
+    llm_model = "gpt-3.5-turbo-0301"
+```
+
+### Create our QandA application
+```
+from langchain.chains import RetrievalQA
+from langchain.chat_models import ChatOpenAI
+from langchain.document_loaders import CSVLoader
+from langchain.indexes import VectorstoreIndexCreator
+from langchain.vectorstores import DocArrayInMemorySearch
+```
+
+```
+file = 'OutdoorClothingCatalog_1000.csv'
+loader = CSVLoader(file_path=file)
+data = loader.load()
+```
+
+```
+index = VectorstoreIndexCreator(
+    vectorstore_cls=DocArrayInMemorySearch
+).from_loaders([loader])
+```
+
+```
+llm = ChatOpenAI(temperature = 0.0, model=llm_model)
+qa = RetrievalQA.from_chain_type(
+    llm=llm, 
+    chain_type="stuff", 
+    retriever=index.vectorstore.as_retriever(), 
+    verbose=True,
+    chain_type_kwargs = {
+        "document_separator": "<<<<>>>>>"
+    }
+)
+```
+
+上述内容在上节课讲过，创建一个 qa 系统，下面列举 Example generation（示例生成）的一些常见方法。
+
+### Example generation
+
+#### 方法1：Coming up with test datapoints
+手动：查看测试数据点。
+![image](https://github.com/user-attachments/assets/c4fe9af7-8718-4971-8465-67d27ca19980)
+
+#### 方法2：Hard-coded examples
+手动：列举难的示例，基于生成的答案进行对比。
+```
+examples = [
+    {
+        "query": "Do the Cozy Comfort Pullover Set\
+        have side pockets?",
+        "answer": "Yes"
+    },
+    {
+        "query": "What collection is the Ultra-Lofty \
+        850 Stretch Down Hooded Jacket from?",
+        "answer": "The DownTek collection"
+    }
+]
+```
+
+#### 方法3：LLM-Generated examples
+自动：使用 QAGenerateChain 链，将从每个文档创建一个问题答案对。
+```
+from langchain.evaluation.qa import QAGenerateChain
+
+# 将模型本身传入 QAGenerateChain 链
+example_gen_chain = QAGenerateChain.from_llm(ChatOpenAI(model=llm_model))
+
+# 创建一堆例子
+new_examples = example_gen_chain.apply_and_parse(
+    [{"doc": t} for t in data[:5]]
+)
+```
+
+![image](https://github.com/user-attachments/assets/e6d01323-4239-45d2-89c3-e88457f3ff59)
+
+![image](https://github.com/user-attachments/assets/e3eb58d4-8f91-4c79-bdf9-fda7d3bae6a0)
+
+#### 方法4：Combine examples
+```
+examples += new_examples
+```
+
+```
+qa.run(examples[0]["query"])
+```
+
+### Manual Evaluation
+```
+import langchain
+# 设置为 True 可以进行 debug（可以看到 token 信息）
+langchain.debug = False
+```
+
+![image](https://github.com/user-attachments/assets/a8c53eee-9c6a-4df5-b4c6-0bd4385414b0)
+
+### LLM assisted evaluation
+```
+predictions = qa.apply(examples)
+```
+
+```
+from langchain.evaluation.qa import QAEvalChain
+```
+
+```
+llm = ChatOpenAI(temperature=0, model=llm_model)
+eval_chain = QAEvalChain.from_llm(llm)
+```
+
+传递示例，进行预测
+```
+graded_outputs = eval_chain.evaluate(examples, predictions)
+```
+
+```
+for i, eg in enumerate(examples):
+    print(f"Example {i}:")
+    print("Question: " + predictions[i]['query'])
+    print("Real Answer: " + predictions[i]['answer'])
+    print("Predicted Answer: " + predictions[i]['result'])
+    print("Predicted Grade: " + graded_outputs[i]['text'])
+    print()
+```
+![image](https://github.com/user-attachments/assets/b9d68c6d-7e0f-4f62-ad30-1c9c9b51a0f1)
 
 ## Agents
+### 导读
+- Using built in LangChain tools: DuckDuckGo search and Wikipedia
+- Defining your own tools
+
+```
+import os
+
+from dotenv import load_dotenv, find_dotenv
+_ = load_dotenv(find_dotenv()) # read local .env file
+
+import warnings
+warnings.filterwarnings("ignore")
+```
+
+```
+# account for deprecation of LLM model
+import datetime
+# Get the current date
+current_date = datetime.datetime.now().date()
+
+# Define the date after which the model should be set to "gpt-3.5-turbo"
+target_date = datetime.date(2024, 6, 12)
+
+# Set the model variable based on the current date
+if current_date > target_date:
+    llm_model = "gpt-3.5-turbo"
+else:
+    llm_model = "gpt-3.5-turbo-0301"
+```
+
+### Built-in LangChain tools
+```
+#!pip install -U wikipedia
+```
+
+```
+from langchain.agents.agent_toolkits import create_python_agent
+from langchain.agents import load_tools, initialize_agent
+from langchain.agents import AgentType
+from langchain.tools.python.tool import PythonREPLTool
+from langchain.python import PythonREPL
+from langchain.chat_models import ChatOpenAI
+```
+
+```
+llm = ChatOpenAI(temperature=0, model=llm_model)
+```
+
+```
+tools = load_tools(["llm-math","wikipedia"], llm=llm)
+```
+
+```
+agent= initialize_agent(
+    tools, 
+    llm, 
+    agent=AgentType.CHAT_ZERO_SHOT_REACT_DESCRIPTION,
+    handle_parsing_errors=True,
+    verbose = True)
+```
+
+```
+agent("What is the 25% of 300?")
+```
+### Wikipedia example
+```
+question = "Tom M. Mitchell is an American computer scientist \
+and the Founders University Professor at Carnegie Mellon University (CMU)\
+what book did he write?"
+result = agent(question) 
+```
+
+### Python Agent
+```
+agent = create_python_agent(
+    llm,
+    tool=PythonREPLTool(),
+    verbose=True
+)
+```
+
+```
+customer_list = [["Harrison", "Chase"], 
+                 ["Lang", "Chain"],
+                 ["Dolly", "Too"],
+                 ["Elle", "Elem"], 
+                 ["Geoff","Fusion"], 
+                 ["Trance","Former"],
+                 ["Jen","Ayai"]
+                ]
+```
+
+```
+agent.run(f"""Sort these customers by \
+last name and then first name \
+and print the output: {customer_list}""") 
+```
+
+```
+import langchain
+langchain.debug=True
+agent.run(f"""Sort these customers by \
+last name and then first name \
+and print the output: {customer_list}""") 
+langchain.debug=False
+```
+
+### Define your own tool
+```
+#!pip install DateTime
+```
+
+```
+from langchain.agents import tool
+from datetime import date
+```
+
+```
+@tool
+def time(text: str) -> str:
+    """Returns todays date, use this for any \
+    questions related to knowing todays date. \
+    The input should always be an empty string, \
+    and this function will always return todays \
+    date - any date mathmatics should occur \
+    outside this function."""
+    return str(date.today())
+```
+
+```
+agent= initialize_agent(
+    tools + [time], 
+    llm, 
+    agent=AgentType.CHAT_ZERO_SHOT_REACT_DESCRIPTION,
+    handle_parsing_errors=True,
+    verbose = True)
+```
 
 ## Concluion
