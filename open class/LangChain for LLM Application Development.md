@@ -1251,10 +1251,14 @@ agent= initialize_agent(
     handle_parsing_errors=True, # 允许Agent处理解析错误，提高鲁棒性。
     verbose = True) # 启用详细输出模式，方便调试和观察Agent的决策过程。
 ```
-**步骤5：提问**
-![image](https://github.com/user-attachments/assets/18ae066b-e9ef-4644-b6df-5360fc1e6fe6)
+**步骤5：提问1**
 
-### Wikipedia example
+简单的数学问题：
+![image](https://github.com/user-attachments/assets/aaa344b2-b3d1-4b44-9ac8-1046ab429237)
+
+**步骤6：提问2**
+
+需要使用 Wikipedia 进行搜索的问题：
 ```
 question = "Tom M. Mitchell is an American computer scientist \
 and the Founders University Professor at Carnegie Mellon University (CMU)\
@@ -1262,15 +1266,19 @@ what book did he write?"
 result = agent(question) 
 ```
 
+![image](https://github.com/user-attachments/assets/b8424d95-bf4b-43c8-8875-dc3d7e726b65)
+
+
 ### Python Agent
+create_python_agent 函数创建一个专门用于执行 Python 代码的 Agent：
 ```
 agent = create_python_agent(
     llm,
-    tool=PythonREPLTool(),
+    tool=PythonREPLTool(), # 使用PythonREPLTool作为Agent的工具，该工具提供了一个Python REPL（Read-Eval-Print Loop）环境，允许 Agent 执行 Python 代码。
     verbose=True
 )
 ```
-
+测试数据：
 ```
 customer_list = [["Harrison", "Chase"], 
                  ["Lang", "Chain"],
@@ -1282,12 +1290,10 @@ customer_list = [["Harrison", "Chase"],
                 ]
 ```
 
-```
-agent.run(f"""Sort these customers by \
-last name and then first name \
-and print the output: {customer_list}""") 
-```
+使用 agent 对测试数据进行排序：
+![image](https://github.com/user-attachments/assets/cbbd4c66-7a5a-479b-8c3e-2b46a7b3e6d2)
 
+查看 langchain 的完整返回（一步步调用 chain 解决问题的过程）：
 ```
 import langchain
 langchain.debug=True
@@ -1297,17 +1303,20 @@ and print the output: {customer_list}""")
 langchain.debug=False
 ```
 
+![image](https://github.com/user-attachments/assets/ecdc4293-7000-4c66-97b4-0f985262e85c)
+
 ### Define your own tool
 ```
 #!pip install DateTime
 ```
-
+步骤1：引入依赖
 ```
 from langchain.agents import tool
 from datetime import date
 ```
-
+步骤2：定义了一个自定义工具函数（在 LangChain 中获取当前日期）
 ```
+# tool 装饰器：标记该函数为 LangChain 工具，可以被 LangChain 的 Agent 使用。
 @tool
 def time(text: str) -> str:
     """Returns todays date, use this for any \
@@ -1318,14 +1327,12 @@ def time(text: str) -> str:
     outside this function."""
     return str(date.today())
 ```
-
+初始化了一个 LangChain Agent，并将自定义的 time 工具添加到了工具列表中：
 ```
 agent= initialize_agent(
-    tools + [time], 
+    tools + [time], # 组合引入的 langchain 自带工具和自定义工具
     llm, 
     agent=AgentType.CHAT_ZERO_SHOT_REACT_DESCRIPTION,
     handle_parsing_errors=True,
     verbose = True)
 ```
-
-## Concluion
