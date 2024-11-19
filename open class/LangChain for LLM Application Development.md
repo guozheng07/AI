@@ -1,4 +1,4 @@
-![image](https://github.com/user-attachments/assets/3d5075cc-d764-427e-8ea5-31166fc2b395)# 课程地址
+# 课程地址
 https://learn.deeplearning.ai/courses/langchain/lesson/1/introduction
 
 # 课程内容
