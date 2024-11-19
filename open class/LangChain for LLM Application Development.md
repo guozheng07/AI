@@ -1182,7 +1182,15 @@ for i, eg in enumerate(examples):
 
 ## Agents
 ### 导读
-- Using built in LangChain tools: DuckDuckGo search and Wikipedia
+- Using built in LangChain tools: DuckDuckGo search and Wikipedia（主要用作外部知识源或工具，用于增强AI模型的信息检索能力）
+  - **DuckDuckGo：进行网络搜索，获取实时信息**
+    - 提供隐私保护的搜索结果
+    - 可以获取最新的网络信息
+    - 适用于需要实时或广泛信息的查询
+  - **Wikipedia：检索特定主题的百科知识**
+    - 提供结构化的百科全书信息
+    - 适合获取概念解释、历史背景等深度知识
+    - 信息相对可靠，但可能不是最新
 - Defining your own tools
 
 ```
@@ -1215,7 +1223,7 @@ else:
 ```
 #!pip install -U wikipedia
 ```
-
+**步骤1：引入依赖**
 ```
 from langchain.agents.agent_toolkits import create_python_agent
 from langchain.agents import load_tools, initialize_agent
@@ -1224,27 +1232,28 @@ from langchain.tools.python.tool import PythonREPLTool
 from langchain.python import PythonREPL
 from langchain.chat_models import ChatOpenAI
 ```
-
+**步骤2：建立 chat 模型**
 ```
 llm = ChatOpenAI(temperature=0, model=llm_model)
 ```
-
+**步骤3：使用 load_tools 函数加载预定义的工具，tools 变量将包含加载的工具列表，可以在后续的 Agent 或 Chain 中使用**
 ```
+# "llm-math": 这是一个数学计算工具，能够使用语言模型进行复杂的数学运算。
+# "wikipedia": 这是维基百科查询工具，可以从维基百科获取信息。
 tools = load_tools(["llm-math","wikipedia"], llm=llm)
 ```
-
+**步骤4：创建和配置一个 agent 实例**
 ```
 agent= initialize_agent(
-    tools, 
-    llm, 
-    agent=AgentType.CHAT_ZERO_SHOT_REACT_DESCRIPTION,
-    handle_parsing_errors=True,
-    verbose = True)
+    tools, # 工具
+    llm, # 语言模型
+    agent=AgentType.CHAT_ZERO_SHOT_REACT_DESCRIPTION, # 代理类型，这种类型的 Agent 能够在没有先前训练的情况下，根据工具描述来选择和使用工具。
+    handle_parsing_errors=True, # 允许Agent处理解析错误，提高鲁棒性。
+    verbose = True) # 启用详细输出模式，方便调试和观察Agent的决策过程。
 ```
+**步骤5：提问**
+![image](https://github.com/user-attachments/assets/18ae066b-e9ef-4644-b6df-5360fc1e6fe6)
 
-```
-agent("What is the 25% of 300?")
-```
 ### Wikipedia example
 ```
 question = "Tom M. Mitchell is an American computer scientist \
