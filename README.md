@@ -1,6 +1,8 @@
 # AI 工具
 AI Websites & Tools：https://www.toolify.ai/
 
+https://docs.task-master.dev/capabilities/task-structure
+
 AI 工具大盘点 👉 https://shorturl.at/CzJgD
 
 日常使用工具：
@@ -20,6 +22,9 @@ code 编程:
 
 cursor 教程：
 - [轻松开发chat with PDF的RAG应用](https://www.bilibili.com/video/BV1GFphe9EvV/?vd_source=e02a9cdd2e29483dd230bd1d46cdb5da)
+
+PRD -> code 的 mcp：
+- https://docs.task-master.dev/capabilities/task-structure
 
 # AI 资讯 & 知识库
 - [早早聊-资讯](https://zaozaoliao.feishu.cn/wiki/IaUSwhYZ0iVz3wkIkoCciyRan4c)
