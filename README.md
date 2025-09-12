@@ -1,7 +1,7 @@
 # AI 工具
 AI Websites & Tools：https://www.toolify.ai/
 
-https://docs.task-master.dev/capabilities/task-structure
+AI 工具集：https://docs.task-master.dev/capabilities/task-structure
 
 AI 工具大盘点 👉 https://shorturl.at/CzJgD
 
