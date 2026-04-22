@@ -1,4 +1,4 @@
-# 词汇总揽
+# 词汇总览
 <img width="2162" height="942" alt="image" src="https://github.com/user-attachments/assets/302ad95c-2638-4d05-b948-367d800b9009" />
 
 # 调用关系一：Agent → Prompt → SKILL → Sub-Agent → Sub-Skill
