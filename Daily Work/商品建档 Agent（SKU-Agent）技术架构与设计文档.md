@@ -158,7 +158,56 @@ const blockRenderers = useMemo<Record<string, BlockRenderer>>(() => ({
 
 ---
 
-### 5.2 内嵌浏览器 UI Bridge 三层透传通信
+### 5.2 本地开发环境 SSE 代理攻关（`config/config.ts`）
+
+**背景**：本地 `pnpm dev` 启动后，SSE 接口长期 pending、客户端收不到任何事件，原因是两个问题同时存在，缺一不可地叠加在一起。
+
+**问题根因**：
+
+| # | 问题 | 表现 | 根因 |
+|---|------|------|------|
+| 1 | webpack-dev-server `compress: true`（框架默认） | SSE 流永远 pending | gzip/brotli 压缩需积攒足够数据才输出，流式事件全被积压在压缩缓冲区 |
+| 2 | `http-proxy-middleware` v2 / v3 语法差异 | 钩子静默失效，响应被吞 | webpack-dev-server 5 内置 v2，若误用 v3 的 `on.proxyRes` 写法，钩子不生效；同时 `selfHandleResponse: true` 会吞掉所有响应 |
+| 3 | 代理路由顺序错误 | SSE 接口走了普通 JSON 代理 | webpack 代理按从上到下首次匹配，SSE 路径必须写在同前缀的通配规则之前 |
+
+**解法**（三管齐下）：
+
+```ts
+// config/config.ts
+
+// ① 全局关闭压缩，彻底解决 SSE 积压问题
+devServer: {
+  compress: false,
+
+  proxy: {
+    // ② SSE 接口精确路径写在通配前缀之前，避免被普通代理先匹配
+    '/productagent/api/message': makeSseProxy(target),  // 消息流
+    '/productagent/api/events':  makeSseProxy(target),  // 全局事件流
+    '/productagent/api':         { target, changeOrigin: true },  // 其余普通接口
+  }
+}
+
+// ③ SSE 专属代理工厂：v2 语法 + selfHandleResponse + 手动 pipe
+const makeSseProxy = (target: string) => ({
+  target,
+  changeOrigin: true,
+  selfHandleResponse: true,          // 告诉代理：不要自动写回响应
+  onProxyRes: (proxyRes, _req, res) => {  // ⚠️ v2 顶层写法，不是 on.proxyRes
+    Object.entries(proxyRes.headers).forEach(([k, v]) => res.setHeader(k, v));
+    res.setHeader('X-Accel-Buffering', 'no');  // 禁用 nginx/CDN 缓冲
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.writeHead(proxyRes.statusCode ?? 200);
+    proxyRes.pipe(res);  // 直接 pipe 原始流，零缓冲
+  },
+});
+```
+
+> 配置文件见 [`config/config.ts`](../../../../config/config.ts)
+
+---
+
+### 5.3 内嵌浏览器 UI Bridge 三层透传通信
 
 **背景**：芥末系统（product-w）运行在 ai-iframe 内嵌的 iframe 中，需要调用 confirm / toast / alert 等 UI 原语，但不能直接访问外层 pc-w 的 UI 组件库。
 
@@ -193,7 +242,7 @@ product-w（最内层 iframe）
 
 ---
 
-### 5.3 跨会话隔离三层防御体系
+### 5.4 跨会话隔离三层防御体系
 
 **背景**：用户快速切换会话时，旧会话 SSE 消息可能延迟到达并污染新会话的 UI。
 
@@ -209,7 +258,7 @@ QueuePanel 的「中断并发送」/「撤销」操作还在渲染时**快照 se
 
 ---
 
-### 5.4 断点续传机制（message.resume）
+### 5.5 断点续传机制（message.resume）
 
 当用户刷新页面或网络中断后，AI 已生成到一半的回复可以无缝续接。
 
@@ -231,7 +280,7 @@ QueuePanel 的「中断并发送」/「撤销」操作还在渲染时**快照 se
 
 ---
 
-### 5.5 可编辑表格双向数据链路
+### 5.6 可编辑表格双向数据链路
 
 完整闭环：AI 推送表格数据 → 前端展示 → 用户编辑 → 提交 → AI 继续建档。
 
@@ -251,7 +300,7 @@ SSE block (modify_excel_card)
 
 ---
 
-### 5.6 RSJS 状态管理架构
+### 5.7 RSJS 状态管理架构
 
 项目统一使用 `@osgfe/rs-react`（响应式 Service 模式），以 `$` 结尾的属性为可观测属性，`observer` 包裹的组件自动追踪依赖并精确重渲染。
 
@@ -281,7 +330,7 @@ const SkuAgentContent = observer(({ agentType, globalEventService }) => {
 
 ---
 
-### 5.7 消息排队管理（QueuePanel）
+### 5.8 消息排队管理（QueuePanel）
 
 用户可在 AI 还未回复时连续发送消息，多条消息有序排队等待处理。
 
@@ -293,7 +342,7 @@ const SkuAgentContent = observer(({ agentType, globalEventService }) => {
 
 ---
 
-### 5.8 文件上传（McS3Upload 封装）
+### 5.9 文件上传（McS3Upload 封装）
 
 ```
 用户拖拽 / 点击上传（支持 Excel、图片）
