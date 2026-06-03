@@ -1,412 +1,837 @@
-# 商品建档 Agent（SKU-Agent）技术架构与设计文档
-
-> **适用读者**：前端开发、架构评审、技术汇报
-> **最后更新**：2026-06-02
-
----
-
-## 一、项目定位
-
-SKU-Agent 是 Keemart 芥末系统内嵌的 AI 商品建档助手，运行于 `osg-fe-ai-iframe` 应用中。用户通过自然语言或上传 Excel/图片，由 AI Agent 自动完成商品批量建档的结构化数据填写，最终由商家确认后提交到芥末平台。
-
----
-
-## 二、整体架构
-
-### 2.1 三层嵌套架构
-
-```
-pc-w（osg-fe-jiemo-pc-w，外层主应用壳）
-  └── ai-iframe（osg-fe-ai-iframe，AI Agent 容器层）
-        └── sku-agent（商品建档 Agent 业务层）
-              ├── shared/    跨 Agent 公共能力（ChatArea、TaskPanel、EmbeddedBrowser 等）
-              └── sku-agent/ 商品建档专属实现（Dialogue、EditableTable、ResultCard 等）
-```
-
-**关键设计原则**：`GlobalEventService`（全局 SSE 连接 `/api/events`）生命周期绑定在 `agent/index.tsx` 这一层，Agent 切换时连接不断开；各 Agent 专属的 `ChatService`、`SessionService`、`TaskService` 通过 `bindServices` 随组件挂载/卸载自动创建/销毁。
-
-### 2.2 技术栈
-
-| 层级 | 技术 |
-|------|------|
-| UI 框架 | React 18 + TypeScript |
-| 组件库 | `@sailor/keeta-design-pc`（Keeta Design PC） |
-| 状态管理 | `@osgfe/rs-react`（RSJS，响应式 Service 模式） |
-| 实时通信 | SSE（Server-Sent Events），基于 Fetch ReadableStream |
-| 工具库 | `@osgfe/tools`（含 lodash-es、hGet/hPost 等） |
-| 国际化 | `@sailor/i18n-web`（支持中/英/阿拉伯文） |
-| 样式 | TailwindCSS + CSS Module（复杂样式兜底） |
-| 构建 | OBuilder（`pnpm run dev:HK / dev:EU / build`） |
-
----
-
-## 三、UI 布局架构
-
-页面采用**三栏可拖拽布局**，各区域宽度以百分比定义，窗口缩放后比例不变：
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  AppLayout（顶部导航占位，100dvh - TOP_NAVBAR_HEIGHT_PX）    │
-├──────────────┬──────────────────────────┬────────────────────┤
-│  TaskPanel   │       ChatArea           │     Dialogue       │
-│  （左侧）    │  （中间，flex:1 自适应）  │  （右侧，可拖拽   │
-│  任务列表    │  历史消息 + 流式消息      │  展开/收起）       │
-│  会话列表    │  QueuePanel（排队浮层）   │  可编辑表格        │
-│  flex:0 0    │  输入框（含上传按钮）     │  flex:0 0          │
-│  taskWidthPct│                          │  dialogueWidthPct  │
-│  (10%~30%)   │                          │  (20%~50%)         │
-└──────────────┴──────────────────────────┴────────────────────┘
-```
-
-- **ChatArea 与 EmbeddedBrowser 互斥**：任务"查看芥末链接"时主内容区切换为内嵌浏览器视图，对话区暂时隐藏
-- **拖拽实现**：基于 `pointerdown/pointermove/pointerup` 事件，以百分比换算位移，并对各区域设置最小像素约束（TaskPanel ≥ 250px，ChatArea ≥ 400px）
-
----
-
-## 四、业务功能清单
-
-### 4.1 商品批量建档主流程
-
-| 功能 | 实现组件 | 说明 |
-|------|----------|------|
-| 自然语言建档 | `ChatArea` 输入框 | 用户输入商品描述，AI 自动识别并结构化 |
-| 文件上传建档 | `McS3Upload`（S3 上传封装） | 支持 Excel / 图片，拖拽或点击上传 |
-| AI 进度可视化 | `ProgressCard` | 展示各阶段步骤名称、耗时、状态（running/done/error） |
-| 折叠进度摘要 | `FoldProcessCard` | 可折叠的执行过程概览，避免冗余信息占用空间 |
-| 结果卡片 | `ResultCard` | 多 block 编排容器：折叠进度 + Markdown 说明 + 芥末链接 + 可编辑表格 |
-| 批量确认提交 | `Dialogue` + `EditableTable` | 用户在侧栏审核/修改 AI 填写的表格字段后提交 |
-| 任务跳转 | `TaskPanel` 菜单 | 支持"查看会话"、"查看待办"、"查看我的申请"直接跳转芥末页面 |
-
-### 4.2 对话会话管理
-
-| 功能 | 说明 |
-|------|------|
-| 新建/切换会话 | 左侧会话列表，点击切换，自动加载对应历史消息 |
-| 历史消息分页 | 切换会话后加载最近 N 条，上拉触底自动加载更早消息 |
-| 会话状态 Tag | 标题右侧展示 processing / queued / completed / error 状态 |
-| 消息取消 | 对当前正在生成的 AI 消息点击停止，调用 `/api/cancel` |
-| 消息撤销 | 从排队队列删除尚未处理的消息（撤销当前流时先 `clearCurrentStream`） |
-| 中断并发送 | 打断当前回复，携带 `queueQid` 直接发送新消息 |
-| 异地踢出重连 | 同账号其他窗口激活时弹出提示，一键重连恢复所有数据 |
-
-### 4.3 任务管理
-
-| 功能 | 说明 |
-|------|------|
-| 任务列表 | 左侧 TaskPanel 展示全部建档任务，高亮待处理任务 |
-| 任务分页 | 滚动到底部自动加载更多历史任务 |
-| 任务操作 | 下拉菜单：查看会话 / 查看待办 / 查看我的申请（跳转芥末系统） |
-
-### 4.4 内嵌浏览器
-
-| 功能 | 说明 |
-|------|------|
-| 多标签浏览 | 最多 20 个标签页，超出时替换最早标签 |
-| 地址栏导航 | 输入 URL 回车跳转，相对路径自动解析 |
-| 前进/后退 | 独立维护每个标签页内部历史栈，不污染外层浏览器 history |
-| 刷新 | URL 追加时间戳参数强制 iframe 重载 |
-| 芥末链接直开 | AI 回复中的 `jiemo_link` block 点击后切换到内嵌浏览器并打开 |
-| 关闭回到对话 | 全部标签关闭后自动切回聊天视图 |
-
-### 4.5 可编辑表格（Dialogue 侧栏）
-
-| 功能 | 说明 |
-|------|------|
-| 行内编辑 | 单元格点击即可编辑，文本/图片两种编辑器 |
-| 低置信度高亮 | `cellStatus: lowConfidence` → 黄色背景 |
-| 无效值高亮 | `cellStatus: invalid` → 红色背景 + Tooltip 错误提示 |
-| 编辑清除状态 | 修改后自动将 cellStatus 置为 `confirmed`，清除高亮 |
-| 统计展示 | 展示总行数 / 待确认数 / 待填写数 |
-| 导出提交 | 表格数据 POST 生成 Excel → S3 链接 → 通过聊天发给 AI 形成闭环 |
-| 侧栏宽度控制 | 拖拽分隔条（20%~50%）；点击摘要卡片触发自动展开 |
-
----
-
-## 五、核心技术设计
-
-### 5.1 SSE 实时流通信 + 消息块渲染引擎
-
-AI 回复通过 SSE 流式推送，前端消费多种异构消息块并实时渲染。
-
-**事件类型**：
-
-```
-message.start    → 初始化消息流，清空 loading block（sessionId 守卫，过期事件直接丢弃）
-block            → 新增 block（整体替换 currentMessageStream$ 对象，触发 observer 重渲染）
-block.append     → 向已有 block 追加内容（流式文本增量）
-block.delta      → Markdown 流式增量更新
-message.replace  → Server 端重算结果，整体替换当前消息流
-message.done     → 消息结束，loading → 完成态
-message.resume   → 断点续传，将历史 blocks 注入 currentMessageStream$
-kicked           → 账号被其他设备抢占
-```
-
-**Block 渲染器插件化**：通用 `ChatArea` 不内置业务逻辑，各 Agent 通过 `blockRenderers` 属性注入专属卡片渲染函数，key 对应后端 SSE block 的 `type` 字段：
-
-```tsx
-const blockRenderers = useMemo<Record<string, BlockRenderer>>(() => ({
-  process_card:      (block, key) => <ProgressCard ... />,
-  fold_process_card: (block, key) => <FoldProcessCard ... />,
-  result_card:       (block, key) => <ResultCard ... />,
-  jiemo_link:        (block, key) => <JiemoLink ... />,
-  modify_excel_card: (block, key) => <ModifyExcelCardSummary ... />,  // 摘要卡片
-}), [...]);
-// ChatArea 内置处理（无需注册）：loading / thinking / markdown / text / error / image
-```
-
-> 详细设计见 [`tech/SSE_IMPLEMENTATION.md`](./tech/SSE_IMPLEMENTATION.md)
-
----
-
-### 5.2 本地开发环境 SSE 代理攻关（`config/config.ts`）
-
-**背景**：本地 `pnpm dev` 启动后，SSE 接口长期 pending、客户端收不到任何事件，原因是两个问题同时存在，缺一不可地叠加在一起。
-
-**问题根因**：
-
-| # | 问题 | 表现 | 根因 |
-|---|------|------|------|
-| 1 | webpack-dev-server `compress: true`（框架默认） | SSE 流永远 pending | gzip/brotli 压缩需积攒足够数据才输出，流式事件全被积压在压缩缓冲区 |
-| 2 | `http-proxy-middleware` v2 / v3 语法差异 | 钩子静默失效，响应被吞 | webpack-dev-server 5 内置 v2，若误用 v3 的 `on.proxyRes` 写法，钩子不生效；同时 `selfHandleResponse: true` 会吞掉所有响应 |
-| 3 | 代理路由顺序错误 | SSE 接口走了普通 JSON 代理 | webpack 代理按从上到下首次匹配，SSE 路径必须写在同前缀的通配规则之前 |
-
-**解法**（三管齐下）：
-
-```ts
-// config/config.ts
-
-// ① 全局关闭压缩，彻底解决 SSE 积压问题
-devServer: {
-  compress: false,
-
-  proxy: {
-    // ② SSE 接口精确路径写在通配前缀之前，避免被普通代理先匹配
-    '/productagent/api/message': makeSseProxy(target),  // 消息流
-    '/productagent/api/events':  makeSseProxy(target),  // 全局事件流
-    '/productagent/api':         { target, changeOrigin: true },  // 其余普通接口
-  }
-}
-
-// ③ SSE 专属代理工厂：v2 语法 + selfHandleResponse + 手动 pipe
-const makeSseProxy = (target: string) => ({
-  target,
-  changeOrigin: true,
-  selfHandleResponse: true,          // 告诉代理：不要自动写回响应
-  onProxyRes: (proxyRes, _req, res) => {  // ⚠️ v2 顶层写法，不是 on.proxyRes
-    Object.entries(proxyRes.headers).forEach(([k, v]) => res.setHeader(k, v));
-    res.setHeader('X-Accel-Buffering', 'no');  // 禁用 nginx/CDN 缓冲
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.writeHead(proxyRes.statusCode ?? 200);
-    proxyRes.pipe(res);  // 直接 pipe 原始流，零缓冲
-  },
-});
-```
-
-> 配置文件见 [`config/config.ts`](../../../../config/config.ts)
-
----
-
-### 5.3 内嵌浏览器 UI Bridge 三层透传通信
-
-**背景**：芥末系统（product-w）运行在 ai-iframe 内嵌的 iframe 中，需要调用 confirm / toast / alert 等 UI 原语，但不能直接访问外层 pc-w 的 UI 组件库。
-
-**消息协议** (`source: 'jiemo-iframe-ui-bridge'`)：
-
-| 消息类型 | 方向 | 是否需要回写 | 说明 |
-|----------|------|-------------|------|
-| `ui:confirm` | product-w → ai-iframe → pc-w | ✅（`ui:confirm:result`） | 确认/取消弹窗 |
-| `ui:alert` | product-w → ai-iframe → pc-w | ✅（`ui:alert:result`） | 单确认弹窗 |
-| `ui:toast` | product-w → ai-iframe → pc-w | ❌ | 轻提示，无需回调 |
-
-**通信链路**：
-
-```
-product-w（最内层 iframe）
-  ──postMessage(ui:confirm)──▶
-    ai-iframe（EmbeddedBrowser 中继层）
-      ──window.parent.postMessage(原样转发)──▶
-        pc-w（最外层，用 Element UI 渲染 Modal）
-          ──postMessage(ui:confirm:result, requestId)──▶
-        ai-iframe（收到后中继给 product-w）
-          ──activeFrame.contentWindow.postMessage──▶
-        product-w（resolve 内部 Promise，继续执行）
-```
-
-**导航劫持**：product-w 内 `navigateTo`/`linkTo`（`@osgfe/keemart-api`）通过 `xx-message-event` source 向父窗口发消息，ai-iframe 拦截后根据 `options.target` 决定：
-- `_blank` / `isNewTab: true` → 新开内嵌浏览器标签页
-- `_top` → 跳出内嵌浏览器到顶层系统窗口
-- 默认 → 当前标签页导航
-
-> 详细实现见 [`shared/components/embedded-browser/iframe-navigation-message.ts`](../shared/components/embedded-browser/iframe-navigation-message.ts)
-
----
-
-### 5.4 跨会话隔离三层防御体系
-
-**背景**：用户快速切换会话时，旧会话 SSE 消息可能延迟到达并污染新会话的 UI。
-
-| 防御层 | 触发时机 | 机制 |
-|--------|----------|------|
-| **第 1 层：主动中断** | `clearSession()` | 调用 `_currentFetchAbortController.abort()` 立即切断旧 SSE fetch 连接 |
-| **第 2 层：事件 Guard** | `message.start` 收到时 | 校验 `sessionId` 是否与 `currentSessionId$` 匹配，不匹配则丢弃整条消息流 |
-| **第 3 层：状态清零** | `clearSession()` | 重置 10+ 项跨会话敏感状态（消息流、排队链、重连计数、终结事件标志等） |
-
-QueuePanel 的「中断并发送」/「撤销」操作还在渲染时**快照 sessionId** 到闭包中，防止切换会话竞态时操作作用于错误会话。
-
-> 详细设计见 [`tech/SSE_IMPLEMENTATION.md`](./tech/SSE_IMPLEMENTATION.md)「八点五、会话隔离三层防御体系」
-
----
-
-### 5.5 断点续传机制（message.resume）
-
-当用户刷新页面或网络中断后，AI 已生成到一半的回复可以无缝续接。
-
-**流程**：
-
-```
-1. fetchChatHistoryWithResume(sessionId)
-   └── 后端返回历史消息 + 未完成消息携带的 resumeToken
-
-2. ChatService 检测到 resumeToken
-   └── 调用 resumeMessageFromQueue(sessionId, resumeQid, userParts)
-
-3. SSE 推送 message.resume 事件
-   └── 将历史 blocks 注入 currentMessageStream$，重建渲染状态
-
-4. 后续 block 事件追加到已恢复的流中
-   └── 用户看到无缝续接的消息内容
-```
-
----
-
-### 5.6 可编辑表格双向数据链路
-
-完整闭环：AI 推送表格数据 → 前端展示 → 用户编辑 → 提交 → AI 继续建档。
-
-```
-SSE block (modify_excel_card)
-  → blockRenderer 渲染摘要卡片（ModifyExcelCardSummary）
-  → 点击"展开"触发 pushResultToDialogue()
-  → setDialogueTableData() + setDialogueOpenSignal++ → Dialogue 侧栏展开
-  → 用户在 EditableTable 编辑字段
-  → 点击提交 → POST /api/table/export（后端生成 Excel，返回 S3 URL）
-  → chatService.sendMessage(submitPrompt, sessionId, [{ url: s3Url }])
-  → ChatArea 展示用户消息（含 Excel 附件）
-  → AI 收到 Excel 后继续建档流程（闭环）
-```
-
-**切换会话时自动清理**：`currentSessionId$` 变化时，页面自动触发 `dialogueCloseSignal++`，收起侧栏并清空 `dialogueTableData`/`dialogueStatistics`，防止旧会话数据残留。
-
----
-
-### 5.7 RSJS 状态管理架构
-
-项目统一使用 `@osgfe/rs-react`（响应式 Service 模式），以 `$` 结尾的属性为可观测属性，`observer` 包裹的组件自动追踪依赖并精确重渲染。
-
-**Service 职责划分**：
-
-| Service | 注册层级 | 职责 |
-|---------|----------|------|
-| `GlobalEventService` | `agent/index.tsx`（顶层，跨 Agent 共享） | 全局 SSE 连接（`/api/events`），下发 task/session/queue/kicked/message.add 事件 |
-| `ChatService` | `bindServices`（随 Agent 组件） | 消息流管理、SSE 发送/取消/排队、历史加载、断点续传 |
-| `SessionService` | `bindServices`（随 Agent 组件） | 会话列表增删查，会话状态/标题同步 |
-| `TaskService` | `bindServices`（随 Agent 组件） | 任务列表分页加载，任务数据更新 |
-
-**页面双层组件模式**（规避 `bindServices` 类型推断限制）：
-
-```tsx
-// 外层：注册 Service（bindServices 完成依赖注入容器初始化）
-const SkuAgentPage = bindServices(SkuAgentContent, [ChatService, SessionService, TaskService]);
-
-// 内层：observer 包裹，直接读取 Service 响应式属性
-const SkuAgentContent = observer(({ agentType, globalEventService }) => {
-  const chatService = useService(ChatService);
-  // chatService.currentSessionId$ 变化时组件自动重渲染
-});
-```
-
-> 详细设计见 [`tech/STATE_MANAGEMENT.md`](./tech/STATE_MANAGEMENT.md)
-
----
-
-### 5.8 消息排队管理（QueuePanel）
-
-用户可在 AI 还未回复时连续发送消息，多条消息有序排队等待处理。
-
-**核心交互**：
-
-- **取消**：调用 `cancelMessage(qid)`；若取消的是当前响应中的消息，需先 `clearCurrentStream()` 将停止按钮切回发送状态
-- **中断并发送**：绕过 ChatArea 输入框流程，需在 `chatService.outboundPendingUserMessage$` 中预存用户消息（保证聊天区立即显示用户气泡），再调用 `sendMessage` 携带 `queueQid` 让后端识别插队意图
-- **撤销排队消息**：删除队列中尚未开始处理的消息，不影响当前正在响应的消息
-
----
-
-### 5.9 文件上传（McS3Upload 封装）
-
-```
-用户拖拽 / 点击上传（支持 Excel、图片）
-  → McS3Upload 组件 → 调用 uploadFileToS3()
-  → 返回 UploadedFileInfo { url, name, mimeType, size }
-  → 与消息文本一起通过 chatService.sendMessage(text, sessionId, files) 发送给 AI
-```
-
-表格提交时单独走 `downloadTableToS3` 接口（POST 表格数据 → 后端生成 Excel → 返回 S3 URL），不经过 McS3Upload 上传流程。
-
----
-
-## 六、完整数据流转图
-
-```
-用户输入文字 / 拖拽上传文件
-  │
-  ▼
-ChatArea 输入框 → chatService.sendMessage(content, sessionId, files?)
-  │                  │
-  │                  └── POST /api/send → 返回 queueItem(qid)
-  │
-  ▼
-SSE /api/events（GlobalEventService 常驻连接，agent 切换不断开）
-  ├── task.updated       → TaskService 更新任务列表
-  ├── session.updated    → SessionService + ChatService 更新会话状态/标题
-  ├── queue.updated      → ChatService.queue$ 更新 QueuePanel 显示
-  ├── kicked             → 弹出异地登录提示弹窗
-  └── message.add        → 触发加载对应消息的 SSE 流
-
-SSE /api/message/{messageId}（ChatService 按消息建立独立连接）
-  ├── message.start      → 初始化消息流（sessionId 守卫）
-  ├── block              → 新增 block（整体替换 stream 对象触发重渲染）
-  ├── block.append       → 追加内容到已有 block
-  ├── block.delta        → Markdown 增量更新
-  ├── message.replace    → 整体替换消息流
-  ├── message.resume     → 断点续传，恢复历史 blocks
-  └── message.done       → 消息结束
-
-消息块 → blockRenderers 映射 → 各专属卡片组件渲染
-  ├── markdown           → MarkdownRenderer（支持 GFM）
-  ├── thinking           → ThinkingBlock（可折叠）
-  ├── process_card       → ProgressCard（进度步骤可视化）
-  ├── fold_process_card  → FoldProcessCard（折叠过程摘要）
-  ├── result_card        → ResultCard（多 block 编排容器）
-  ├── jiemo_link         → JiemoLink（点击后切换到内嵌浏览器打开）
-  └── modify_excel_card  → ModifyExcelCardSummary（摘要）→ 展开 Dialogue 侧栏
-
-Dialogue 侧栏（EditableTable 可编辑表格）
-  → 用户修改 + 点击提交
-  → POST /api/table/export → 生成 Excel → 返回 S3 URL
-  → chatService.sendMessage(submitPrompt, sessionId, [{ url: s3Url }])
-  → AI 收到 Excel 继续建档流程（完整闭环）
-```
-
----
-
-## 七、详细技术文档索引
-
-| 文档 | 内容 |
-|------|------|
-| [`tech/MODULES.md`](./tech/MODULES.md) | 目录结构与模块职责划分 |
-| [`tech/COMPONENTS.md`](./tech/COMPONENTS.md) | 组件分类、Props 规范、Keeta Design PC 使用规范 |
-| [`tech/SSE_IMPLEMENTATION.md`](./tech/SSE_IMPLEMENTATION.md) | SSE 连接管理、事件分发、断点续传、会话隔离防御体系 |
-| [`tech/STATE_MANAGEMENT.md`](./tech/STATE_MANAGEMENT.md) | RSJS Service 设计模式、响应式属性、依赖注入 |
-| [`tech/API_INTERFACE.md`](./tech/API_INTERFACE.md) | HTTP 接口与 SSE 事件流详细规范 |
-| [`../NEW_AGENT_SOP.md`](../NEW_AGENT_SOP.md) | 新 Agent 开发标准操作流程（复用矩阵、步骤、骨架代码） |
+<html lang="zh-CN"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>商品建档 Agent — 技术架构设计文档</title>
+  <style>
+    :root {
+      --brand:#FF6B35;--brand-light:#FFF3EE;
+      --blue:#3B82F6;--blue-light:#EFF6FF;
+      --green:#10B981;--green-light:#ECFDF5;
+      --purple:#8B5CF6;--purple-light:#F5F3FF;
+      --amber:#F59E0B;--amber-light:#FFFBEB;
+      --red:#EF4444;--red-light:#FEF2F2;
+      --g50:#F9FAFB;--g100:#F3F4F6;--g200:#E5E7EB;--g300:#D1D5DB;
+      --g400:#9CA3AF;--g500:#6B7280;--g600:#4B5563;--g700:#374151;
+      --g800:#1F2937;--g900:#111827;
+      --r:12px;--sh:0 1px 3px rgba(0,0,0,.08),0 4px 12px rgba(0,0,0,.05);
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB",sans-serif;background:var(--g50);color:var(--g800);line-height:1.6;font-size:14px}
+
+    /* layout */
+    .wrap{display:flex;min-height:100vh}
+    .side{width:236px;flex-shrink:0;background:#fff;border-right:1px solid var(--g200);position:sticky;top:0;height:100vh;overflow-y:auto;padding:20px 0 40px}
+    .side-logo{padding:0 18px 16px;border-bottom:1px solid var(--g100);margin-bottom:10px}
+    .side-logo .badge{display:inline-flex;align-items:center;gap:5px;background:var(--brand-light);color:var(--brand);font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;margin-bottom:7px}
+    .side-logo h2{font-size:14px;font-weight:800;color:var(--g900);line-height:1.3}
+    .nav-sec{padding:0 8px}
+    .nav-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--g400);padding:10px 10px 3px}
+    a.nav-a{display:flex;align-items:center;gap:7px;padding:6px 10px;border-radius:7px;font-size:12px;color:var(--g600);text-decoration:none;transition:background .12s,color .12s}
+    a.nav-a:hover{background:var(--g100);color:var(--g900)}
+    .nav-dot{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
+
+    /* main */
+    .main{flex:1;min-width:0}
+    .hero{background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#0f3460 100%);color:#fff;padding:52px 60px 44px;position:relative;overflow:hidden}
+    .hero::before{content:'';position:absolute;top:-80px;right:-80px;width:320px;height:320px;background:radial-gradient(circle,rgba(255,107,53,.22) 0%,transparent 70%);pointer-events:none}
+    .hero-tag{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);padding:4px 12px;border-radius:20px;font-size:12px;margin-bottom:18px}
+    .hero h1{font-size:34px;font-weight:800;line-height:1.2;margin-bottom:12px}
+    .hero h1 span{color:var(--brand)}
+    .hero p{font-size:15px;color:rgba(255,255,255,.65);max-width:620px;margin-bottom:28px;line-height:1.7}
+    .hero-meta{display:flex;gap:20px;font-size:12px;color:rgba(255,255,255,.45)}
+
+    .content{padding:36px 60px 80px;max-width:1080px}
+
+    /* section */
+    .sec{margin-bottom:48px}
+    :target{scroll-margin-top:20px}
+    .sec-hd{display:flex;align-items:center;gap:10px;margin-bottom:22px}
+    .sec-num{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0}
+    .sec-title{font-size:21px;font-weight:800;color:var(--g900)}
+    .sec-title small{font-size:13px;font-weight:400;color:var(--g400);margin-left:8px}
+
+    /* card */
+    .card{background:#fff;border:1px solid var(--g200);border-radius:var(--r);padding:22px;box-shadow:var(--sh)}
+    .card+.card{margin-top:14px}
+    .card-title{font-size:13px;font-weight:700;color:var(--g700);margin-bottom:14px;display:flex;align-items:center;gap:7px}
+
+    /* grids */
+    .g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+    .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+
+    /* stack */
+    .stack{background:#fff;border:1px solid var(--g200);border-radius:9px;padding:14px;box-shadow:var(--sh)}
+    .stack-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--g400);margin-bottom:5px}
+    .stack-val{font-size:13px;font-weight:700;color:var(--g800)}
+    .pill{display:inline-block;font-size:10px;padding:2px 7px;border-radius:10px;margin-top:4px}
+
+    /* layout diagram */
+    .ld{background:var(--g900);border-radius:var(--r);padding:24px}
+    .ld-row{display:flex;gap:6px;height:190px}
+    .lp{border-radius:8px;display:flex;flex-direction:column;padding:14px;color:#fff;position:relative;overflow:hidden}
+    .lp.task{width:22%;background:linear-gradient(160deg,#1e3a5f,#1a2f4e);border:1px solid rgba(59,130,246,.3)}
+    .lp.chat{flex:1;background:linear-gradient(160deg,#1a2f1a,#162614);border:1px solid rgba(16,185,129,.3)}
+    .lp.dlg{width:31%;background:linear-gradient(160deg,#2d1a3d,#24152f);border:1px solid rgba(139,92,246,.3)}
+    .lp-name{font-size:13px;font-weight:700;margin-bottom:3px}
+    .lp-sub{font-size:10px;opacity:.5;margin-bottom:10px}
+    .lp-feat{font-size:10px;opacity:.65;line-height:1.9}
+    .lp-range{position:absolute;bottom:10px;right:10px;font-size:9px;padding:2px 7px;border-radius:8px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.5)}
+    .dh{width:4px;background:rgba(255,255,255,.07);border-radius:2px;flex-shrink:0;align-self:stretch}
+
+    /* features */
+    .fg-title{font-size:13px;font-weight:700;color:var(--g700);margin-bottom:10px;display:flex;align-items:center;gap:7px}
+    .fg-title::after{content:'';flex:1;height:1px;background:var(--g200)}
+    .fl{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:9px;margin-bottom:22px}
+    .fi{background:#fff;border:1px solid var(--g200);border-radius:9px;padding:13px;display:flex;align-items:flex-start;gap:9px;box-shadow:var(--sh)}
+    .fi-ic{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+    .fi-name{font-size:12px;font-weight:700;color:var(--g800);margin-bottom:2px}
+    .fi-desc{font-size:11px;color:var(--g500);line-height:1.5}
+
+    /* SSE events */
+    .sse-list{display:flex;flex-wrap:wrap;gap:7px}
+    .sse{display:flex;align-items:center;gap:6px;background:var(--g50);border:1px solid var(--g200);border-radius:7px;padding:7px 11px}
+    .sse code{font-family:"SF Mono",Menlo,monospace;font-size:10px;font-weight:700;color:var(--blue);background:var(--blue-light);padding:1px 5px;border-radius:3px}
+    .sse span{font-size:11px;color:var(--g500)}
+
+    /* block renderers */
+    .blk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:9px}
+    .blk{border-radius:8px;padding:11px 13px;border:1px solid}
+    .blk-type{font-family:"SF Mono",Menlo,monospace;font-size:10px;font-weight:700;margin-bottom:3px}
+    .blk-comp{font-size:12px;font-weight:600;margin-bottom:2px}
+    .blk-desc{font-size:10px;opacity:.65}
+
+    /* bridge */
+    .bridge{display:flex;align-items:center;gap:0;overflow-x:auto;padding:8px 0}
+    .bn{border-radius:9px;padding:11px 14px;text-align:center;flex-shrink:0;min-width:110px}
+    .bn-t{font-size:12px;font-weight:700;margin-bottom:3px}
+    .bn-s{font-size:10px;opacity:.55}
+    .ba{flex:1;min-width:36px;text-align:center;color:var(--g300);font-size:20px;position:relative}
+    .ba-lbl{position:absolute;top:-17px;left:50%;transform:translateX(-50%);font-size:9px;white-space:nowrap;background:var(--blue-light);color:var(--blue);padding:1px 5px;border-radius:5px;font-weight:600}
+
+    /* defense */
+    .def{display:flex;align-items:flex-start;gap:14px;padding:15px;border-radius:9px;border:1px solid var(--g200);background:#fff;box-shadow:var(--sh)}
+    .def+.def{margin-top:9px}
+    .def-num{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0}
+    .def-title{font-size:13px;font-weight:700;color:var(--g800)}
+    .def-desc{font-size:12px;color:var(--g500);margin-top:2px}
+    .def-code{font-family:"SF Mono",Menlo,monospace;font-size:10px;background:var(--g100);color:var(--g700);padding:1px 6px;border-radius:3px;display:inline-block;margin-top:5px}
+
+    /* flow */
+    .flow{display:flex;flex-direction:column}
+    .fstep{display:flex;align-items:stretch;gap:0}
+    .fline{display:flex;flex-direction:column;align-items:center;width:36px;flex-shrink:0}
+    .fdot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:5px}
+    .fconn{flex:1;width:2px;background:var(--g200);margin:3px 0}
+    .fcnt{flex:1;padding:3px 0 14px 6px}
+    .ft{font-size:12px;font-weight:600;color:var(--g800)}
+    .fd{font-size:11px;color:var(--g500);margin-top:1px}
+
+    /* service table */
+    .stbl{width:100%;border-collapse:collapse;font-size:12px}
+    .stbl th{text-align:left;padding:9px 14px;background:var(--g50);color:var(--g500);font-size:11px;font-weight:600;border-bottom:1px solid var(--g200)}
+    .stbl td{padding:11px 14px;border-bottom:1px solid var(--g100);vertical-align:top}
+    .stbl tr:last-child td{border-bottom:none}
+    .sn{font-family:"SF Mono",Menlo,monospace;font-size:11px;font-weight:600;padding:2px 6px;border-radius:4px}
+
+    /* data flow dark */
+    .dfdk{background:var(--g900);border-radius:var(--r);padding:22px 26px;color:#fff}
+    .dfph{margin-bottom:18px}
+    .dfph-t{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.35);margin-bottom:8px;display:flex;align-items:center;gap:7px}
+    .dfph-t::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.07)}
+    .dfit-list{display:flex;flex-wrap:wrap;gap:6px}
+    .dfit{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);border-radius:7px;padding:6px 10px;font-size:11px}
+    .dfit code{font-family:"SF Mono",Menlo,monospace;font-size:10px;font-weight:600}
+    .dfit span{font-size:10px;color:rgba(255,255,255,.4)}
+    .df-arrow{color:rgba(255,255,255,.2);font-size:16px;align-self:center}
+
+    /* docs */
+    .doc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:11px}
+    .doc{background:#fff;border:1px solid var(--g200);border-radius:9px;padding:14px;display:flex;gap:11px;box-shadow:var(--sh);transition:box-shadow .15s,transform .15s}
+    .doc:hover{box-shadow:0 4px 6px rgba(0,0,0,.07),0 10px 30px rgba(0,0,0,.08);transform:translateY(-1px)}
+    .doc-ic{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0}
+    .doc-name{font-family:"SF Mono",Menlo,monospace;font-size:12px;font-weight:700;color:var(--g800);margin-bottom:3px}
+    .doc-desc{font-size:11px;color:var(--g500);line-height:1.5}
+
+    @media(max-width:900px){
+      .side{display:none}
+      .hero{padding:32px 20px 24px}
+      .content{padding:20px 20px 60px}
+      .hero h1{font-size:24px}
+      .g2,.g3,.g4{grid-template-columns:1fr}
+      .ld-row{flex-direction:column;height:auto}
+      .lp.task,.lp.dlg{width:100%;height:100px}
+      .bridge{flex-direction:column;align-items:flex-start;gap:8px}
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ── Sidebar ── -->
+<nav class="side">
+  <div class="side-logo">
+    <div class="badge">🤖 SKU-Agent</div>
+    <h2>技术架构<br>设计文档</h2>
+  </div>
+  <div class="nav-sec">
+    <div class="nav-lbl">概览</div>
+    <a href="#arch" class="nav-a"><span class="nav-dot"></span>整体架构</a>
+    <a href="#layout" class="nav-a"><span class="nav-dot"></span>UI 布局</a>
+  </div>
+  <div class="nav-sec">
+    <div class="nav-lbl">业务功能</div>
+    <a href="#features" class="nav-a active"><span class="nav-dot"></span>功能清单</a>
+  </div>
+  <div class="nav-sec">
+    <div class="nav-lbl">核心技术</div>
+    <a href="#sse" class="nav-a"><span class="nav-dot"></span>SSE 实时流</a>
+    <a href="#devproxy" class="nav-a"><span class="nav-dot"></span>本地 SSE 代理</a>
+    <a href="#bridge" class="nav-a"><span class="nav-dot"></span>UI Bridge</a>
+    <a href="#isolation" class="nav-a"><span class="nav-dot"></span>会话隔离</a>
+    <a href="#resume" class="nav-a"><span class="nav-dot"></span>断点续传</a>
+    <a href="#table" class="nav-a"><span class="nav-dot"></span>表格双向链路</a>
+    <a href="#state" class="nav-a"><span class="nav-dot"></span>状态管理</a>
+    <a href="#queue" class="nav-a"><span class="nav-dot"></span>消息排队</a>
+    <a href="#upload" class="nav-a"><span class="nav-dot"></span>文件上传</a>
+  </div>
+  <div class="nav-sec">
+    <div class="nav-lbl">数据流转</div>
+    <a href="#flow" class="nav-a"><span class="nav-dot"></span>完整数据流</a>
+    <a href="#docs" class="nav-a"><span class="nav-dot"></span>文档索引</a>
+  </div>
+</nav>
+
+<div class="main">
+
+<!-- ── Hero ── -->
+<div class="hero">
+  <div class="hero-tag">📦 osg-fe-ai-iframe / sku-agent</div>
+  <h1>商品建档 Agent<br><span>技术架构与设计文档</span></h1>
+  <p>Keemart 芥末系统内嵌的 AI 商品建档助手。用户通过自然语言或上传 Excel/图片，由 AI Agent 自动完成商品批量建档的结构化数据填写，最终由商家确认后提交到芥末平台。</p>
+  <div class="hero-meta">
+    <span>📅 最后更新：2026-06-02</span>
+    <span>👥 前端开发 · 架构评审 · 技术汇报</span>
+  </div>
+</div>
+
+<div class="content">
+
+<!-- ① 整体架构 -->
+<div class="sec" id="arch">
+  <div class="sec-hd">
+    <div class="sec-num" style="background:var(--brand-light);color:var(--brand)">①</div>
+    <div class="sec-title">整体架构</div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title">🏗️ 三层嵌套架构</div>
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <div style="background:var(--g50);border:1px solid var(--g200);border-radius:9px;padding:13px;display:flex;align-items:center;gap:11px">
+        <div style="width:38px;height:38px;background:#fce7f3;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🏠</div>
+        <div>
+          <div style="font-size:13px;font-weight:700">pc-w（osg-fe-jiemo-pc-w）</div>
+          <div style="font-size:11px;color:var(--g500);margin-top:2px">外层主应用壳，负责全局 UI、鉴权、顶部导航</div>
+        </div>
+      </div>
+      <div style="padding-left:20px;color:var(--g300);font-size:16px">└──</div>
+      <div style="margin-left:20px;background:var(--blue-light);border:1px solid #bfdbfe;border-radius:9px;padding:13px;display:flex;align-items:center;gap:11px">
+        <div style="width:38px;height:38px;background:#dbeafe;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🤖</div>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--blue)">ai-iframe（osg-fe-ai-iframe）</div>
+          <div style="font-size:11px;color:var(--g500);margin-top:2px">AI Agent 容器层，GlobalEventService 常驻于此，Agent 切换时 SSE 连接不断开</div>
+        </div>
+      </div>
+      <div style="padding-left:40px;color:var(--g300);font-size:16px">└──</div>
+      <div style="margin-left:40px;background:var(--purple-light);border:1px solid #ddd6fe;border-radius:9px;padding:13px;display:flex;gap:11px">
+        <div style="width:38px;height:38px;background:#ede9fe;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🏷️</div>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--purple)">sku-agent（商品建档 Agent 业务层）</div>
+          <div style="font-size:11px;color:var(--g500);margin-top:2px">ChatService / SessionService / TaskService 通过 bindServices 随组件生命周期自动创建/销毁</div>
+          <div style="display:flex;gap:7px;margin-top:8px;flex-wrap:wrap">
+            <span style="font-size:10px;background:var(--blue-light);color:var(--blue);padding:2px 7px;border-radius:8px">shared/ 跨Agent公共能力</span>
+            <span style="font-size:10px;background:var(--purple-light);color:var(--purple);padding:2px 7px;border-radius:8px">sku-agent/ 专属实现</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⚙️ 技术栈</div>
+    <div class="g4">
+      <div class="stack"><div class="stack-lbl">UI 框架</div><div class="stack-val">React 18</div><div class="pill" style="background:#fce7f3;color:#9d174d">TypeScript</div></div>
+      <div class="stack"><div class="stack-lbl">组件库</div><div class="stack-val">Keeta Design PC</div><div class="pill" style="background:var(--brand-light);color:var(--brand)">@sailor/keeta-design-pc</div></div>
+      <div class="stack"><div class="stack-lbl">状态管理</div><div class="stack-val">RSJS</div><div class="pill" style="background:var(--blue-light);color:var(--blue)">@osgfe/rs-react</div></div>
+      <div class="stack"><div class="stack-lbl">实时通信</div><div class="stack-val">SSE</div><div class="pill" style="background:var(--green-light);color:var(--green)">Fetch ReadableStream</div></div>
+      <div class="stack"><div class="stack-lbl">工具库</div><div class="stack-val">@osgfe/tools</div><div class="pill" style="background:var(--amber-light);color:var(--amber)">含 lodash-es</div></div>
+      <div class="stack"><div class="stack-lbl">国际化</div><div class="stack-val">i18n-web</div><div class="pill" style="background:var(--g100);color:var(--g600)">中 / EN / AR</div></div>
+      <div class="stack"><div class="stack-lbl">样式</div><div class="stack-val">TailwindCSS</div><div class="pill" style="background:var(--g100);color:var(--g600)">+ CSS Module 兜底</div></div>
+      <div class="stack"><div class="stack-lbl">构建</div><div class="stack-val">OBuilder</div><div class="pill" style="background:var(--g100);color:var(--g600)">pnpm dev/build</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ② UI 布局 -->
+<div class="sec" id="layout">
+  <div class="sec-hd">
+    <div class="sec-num" style="background:var(--blue-light);color:var(--blue)">②</div>
+    <div class="sec-title">UI 布局架构<small>三栏可拖拽</small></div>
+  </div>
+  <div class="ld">
+    <div style="font-size:10px;color:rgba(255,255,255,.3);margin-bottom:10px;font-family:monospace">AppLayout（100dvh − TOP_NAVBAR_HEIGHT_PX）</div>
+    <div class="ld-row">
+      <div class="lp task">
+        <div class="lp-name" style="color:#93c5fd">TaskPanel</div>
+        <div class="lp-sub">左侧面板</div>
+        <div class="lp-feat">📋 任务列表<br>💬 会话列表<br>🔔 待处理高亮</div>
+        <div class="lp-range">10%~30%</div>
+      </div>
+      <div class="dh"></div>
+      <div class="lp chat">
+        <div class="lp-name" style="color:#6ee7b7">ChatArea</div>
+        <div class="lp-sub">中间主区域（flex:1）</div>
+        <div class="lp-feat">📝 历史消息 + 流式消息<br>⏳ QueuePanel 排队浮层<br>📎 输入框（含上传）<br>🌐 EmbeddedBrowser（互斥）</div>
+      </div>
+      <div class="dh"></div>
+      <div class="lp dlg">
+        <div class="lp-name" style="color:#c4b5fd">Dialogue</div>
+        <div class="lp-sub">右侧侧栏（可拖拽）</div>
+        <div class="lp-feat">📊 EditableTable<br>✅ 行内编辑 + 高亮<br>📤 导出提交</div>
+        <div class="lp-range">20%~50%</div>
+      </div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:14px;flex-wrap:wrap">
+      <span style="font-size:10px;color:rgba(255,255,255,.4)">⬩ 拖拽：pointerdown/pointermove/pointerup，百分比换算，最小像素约束</span>
+      <span style="font-size:10px;color:rgba(255,255,255,.4)">⬩ ChatArea ↔ EmbeddedBrowser 互斥切换</span>
+    </div>
+  </div>
+</div>
+
+<!-- ③ 业务功能 -->
+<div class="sec" id="features">
+  <div class="sec-hd">
+    <div class="sec-num" style="background:var(--green-light);color:var(--green)">③</div>
+    <div class="sec-title">业务功能清单</div>
+  </div>
+
+  <div class="fg-title">🏭 商品批量建档主流程</div>
+  <div class="fl">
+    <div class="fi"><div class="fi-ic" style="background:#eff6ff">💬</div><div><div class="fi-name">自然语言建档</div><div class="fi-desc">ChatArea 输入框，AI 自动识别并结构化商品信息</div></div></div>
+    <div class="fi"><div class="fi-ic" style="background:#f0fdf4">📎</div><div><div class="fi-name">文件上传建档</div><div class="fi-desc">McS3Upload，支持 Excel/图片，拖拽或点击上传</div></div></div>
+    <div class="fi"><div class="fi-ic" style="background:#fefce8">📊</div><div><div class="fi-name">AI 进度可视化</div><div class="fi-desc">ProgressCard 展示步骤名称、耗时、状态</div></div></div>
+    <div class="fi"><div class="fi-ic" style="background:#faf5ff">📋</div><div><div class="fi-name">折叠进度摘要</div><div class="fi-desc">FoldProcessCard 可折叠执行过程概览</div></div></div>
+    <div class="fi"><div class="fi-ic" style="background:#fff7ed">🃏</div><div><div class="fi-name">结果卡片</div><div class="fi-desc">ResultCard 多 block 编排：进度 + Markdown + 链接 + 表格</div></div></div>
+    <div class="fi"><div class="fi-ic" style="background:#fdf2f8">✅</div><div><div class="fi-name">批量确认提交</div><div class="fi-desc">Dialogue + EditableTable 审核修改后提交</div></div></div>
+    <div class="fi"><div class="fi-ic" style="background:#ecfdf5">🔗</div><div><div class="fi-name">任务跳转</div><div class="fi-desc">TaskPanel 菜单直跳芥末系统相关页面</div></div></div>
+  </div>
+
+  <div class="fg-title">💬 对话会话管理</div>
+  <div class="fl">
+    <div class="fi"><div class="fi-ic" style="background:#eff6ff">🔄</div><div><div class="fi-name">新建/切换会话</div><div class="fi-desc">点击切换，自动加载对应历史消息</div></div></div>
+    <div class="fi"><div class="fi-ic" style="background:#f0fdf4">📜</div><div><div class="fi-name">历史消息分页</div><div class="fi-desc">上拉触底自动加载更早的消息</div></div></div>
+    <div class="fi"><div class="fi-ic" style="background:#fefce8">🏷️</div><div><div class="fi-name">会话状态 Tag</div><div class="fi-desc">processing / queued / completed / error</div></div></div>
+    <div class="fi"><div class="fi-ic" style="background:#faf5ff">⏹️</div><div><div class="fi-name">消息取消/撤销</div><div class="fi-desc">停止生成中的消息，或从队列删除未处理消息</div></div></div>
+    <div class="fi"><div class="fi-ic" style="background:#fff7ed">⚡</div><div><div class="fi-name">中断并发送</div><div class="fi-desc">打断当前回复，携带 queueQid 直接发送新消息</div></div></div>
+    <div class="fi"><div class="fi-ic" style="background:#fef2f2">🔌</div><div><div class="fi-name">异地踢出重连</div><div class="fi-desc">其他窗口抢占时弹提示，一键重连恢复数据</div></div></div>
+  </div>
+
+  <div class="g2">
+    <div>
+      <div class="fg-title">📋 任务管理</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="fi"><div class="fi-ic" style="background:#eff6ff">📃</div><div><div class="fi-name">任务列表</div><div class="fi-desc">TaskPanel 展示全部建档任务，高亮待处理</div></div></div>
+        <div class="fi"><div class="fi-ic" style="background:#f0fdf4">⬇️</div><div><div class="fi-name">任务分页</div><div class="fi-desc">滚动到底部自动加载更多历史任务</div></div></div>
+        <div class="fi"><div class="fi-ic" style="background:#fefce8">⚙️</div><div><div class="fi-name">任务操作</div><div class="fi-desc">查看会话 / 待办 / 我的申请</div></div></div>
+      </div>
+    </div>
+    <div>
+      <div class="fg-title">🌐 内嵌浏览器</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="fi"><div class="fi-ic" style="background:#eff6ff">🗂️</div><div><div class="fi-name">多标签浏览</div><div class="fi-desc">最多 20 个标签页，超出替换最早标签</div></div></div>
+        <div class="fi"><div class="fi-ic" style="background:#f0fdf4">⬅️</div><div><div class="fi-name">前进/后退</div><div class="fi-desc">独立维护每标签页历史栈，不污染外层</div></div></div>
+        <div class="fi"><div class="fi-ic" style="background:#fefce8">🔗</div><div><div class="fi-name">芥末链接直开</div><div class="fi-desc">jiemo_link block 点击切换到内嵌浏览器</div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ④ SSE -->
+<div class="sec" id="sse">
+  <div class="sec-hd">
+    <div class="sec-num" style="background:var(--amber-light);color:var(--amber)">④</div>
+    <div class="sec-title">SSE 实时流通信 + 消息块渲染引擎</div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title">⚡ SSE 事件类型</div>
+    <div class="sse-list">
+      <div class="sse"><code>message.start</code><span>初始化消息流，清空 loading block（sessionId 守卫）</span></div>
+      <div class="sse"><code>block</code><span>新增 block（整体替换 stream 对象，触发 observer 重渲染）</span></div>
+      <div class="sse"><code>block.append</code><span>向已有 block 追加内容（流式文本增量）</span></div>
+      <div class="sse"><code>block.delta</code><span>Markdown 流式增量更新</span></div>
+      <div class="sse"><code>message.replace</code><span>Server 端重算结果，整体替换消息流</span></div>
+      <div class="sse"><code>message.done</code><span>消息结束，loading → 完成态</span></div>
+      <div class="sse"><code>message.resume</code><span>断点续传，历史 blocks 注入 currentMessageStream$</span></div>
+      <div class="sse"><code>kicked</code><span>账号被其他设备抢占</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🧩 Block 渲染器插件化</div>
+    <div style="font-size:12px;color:var(--g500);margin-bottom:14px">通用 ChatArea 通过 <code style="background:var(--g100);padding:1px 5px;border-radius:3px">blockRenderers</code> 属性注入专属卡片渲染函数，key 对应 SSE block 的 <code style="background:var(--g100);padding:1px 5px;border-radius:3px">type</code> 字段</div>
+    <div class="blk-grid">
+      <div class="blk" style="background:#eff6ff;border-color:#bfdbfe"><div class="blk-type" style="color:var(--blue)">process_card</div><div class="blk-comp" style="color:var(--blue)">ProgressCard</div><div class="blk-desc" style="color:#3b82f6">进度步骤可视化</div></div>
+      <div class="blk" style="background:#f0fdf4;border-color:#bbf7d0"><div class="blk-type" style="color:var(--green)">fold_process_card</div><div class="blk-comp" style="color:var(--green)">FoldProcessCard</div><div class="blk-desc" style="color:#10b981">折叠执行过程摘要</div></div>
+      <div class="blk" style="background:#faf5ff;border-color:#ddd6fe"><div class="blk-type" style="color:var(--purple)">result_card</div><div class="blk-comp" style="color:var(--purple)">ResultCard</div><div class="blk-desc" style="color:#8b5cf6">多 block 编排容器</div></div>
+      <div class="blk" style="background:#fff7ed;border-color:#fed7aa"><div class="blk-type" style="color:var(--amber)">jiemo_link</div><div class="blk-comp" style="color:var(--amber)">JiemoLink</div><div class="blk-desc" style="color:#f59e0b">切换到内嵌浏览器</div></div>
+      <div class="blk" style="background:#fdf2f8;border-color:#f9a8d4"><div class="blk-type" style="color:#ec4899">modify_excel_card</div><div class="blk-comp" style="color:#ec4899">ModifyExcelCardSummary</div><div class="blk-desc" style="color:#ec4899">摘要 → 展开 Dialogue</div></div>
+      <div class="blk" style="background:var(--g50);border-color:var(--g200)"><div class="blk-type" style="color:var(--g500)">内置（无需注册）</div><div class="blk-comp" style="color:var(--g600)">ChatArea 内置</div><div class="blk-desc">loading / thinking / markdown / text / error / image</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑤ 本地开发 SSE 代理 -->
+<div class="sec" id="devproxy">
+  <div class="sec-hd">
+    <div class="sec-num" style="background:#fefce8;color:#854d0e">⑤</div>
+    <div class="sec-title">本地开发环境 SSE 代理攻关<small>config/config.ts</small></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;background:var(--g50);border-color:var(--g200)">
+    <div style="font-size:12px;color:var(--g600);line-height:1.7">
+      <strong>背景</strong>：本地 <code style="background:var(--g100);padding:1px 5px;border-radius:3px">pnpm dev</code> 启动后，SSE 接口长期 pending、客户端收不到任何事件。<br>原因是<strong>两个问题同时存在且相互叠加</strong>，缺任何一个修复都无法跑通。
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title">🐛 问题根因（三个叠加）</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr>
+        <th style="text-align:left;padding:8px 12px;background:var(--g50);border-bottom:1px solid var(--g200);font-size:11px;color:var(--g500);width:28px">#</th>
+        <th style="text-align:left;padding:8px 12px;background:var(--g50);border-bottom:1px solid var(--g200);font-size:11px;color:var(--g500)">问题</th>
+        <th style="text-align:left;padding:8px 12px;background:var(--g50);border-bottom:1px solid var(--g200);font-size:11px;color:var(--g500)">表现</th>
+        <th style="text-align:left;padding:8px 12px;background:var(--g50);border-bottom:1px solid var(--g200);font-size:11px;color:var(--g500)">根因</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td style="padding:9px 12px;border-bottom:1px solid var(--g100);font-weight:700;color:var(--red)">1</td>
+          <td style="padding:9px 12px;border-bottom:1px solid var(--g100)"><code style="font-size:10px;background:var(--amber-light);color:#854d0e;padding:1px 5px;border-radius:3px">compress: true</code><br><span style="font-size:10px;color:var(--g400)">框架默认开启</span></td>
+          <td style="padding:9px 12px;border-bottom:1px solid var(--g100);font-size:11px;color:var(--g600)">SSE 流永远 pending</td>
+          <td style="padding:9px 12px;border-bottom:1px solid var(--g100);font-size:11px;color:var(--g500)">gzip/brotli 需积攒足够数据才输出，流式事件全被积压在压缩缓冲区</td>
+        </tr>
+        <tr>
+          <td style="padding:9px 12px;border-bottom:1px solid var(--g100);font-weight:700;color:var(--red)">2</td>
+          <td style="padding:9px 12px;border-bottom:1px solid var(--g100)"><code style="font-size:10px;background:var(--red-light);color:var(--red);padding:1px 5px;border-radius:3px">on.proxyRes</code><br><span style="font-size:10px;color:var(--g400)">v3 语法误用</span></td>
+          <td style="padding:9px 12px;border-bottom:1px solid var(--g100);font-size:11px;color:var(--g600)">钩子静默失效，响应被吞</td>
+          <td style="padding:9px 12px;border-bottom:1px solid var(--g100);font-size:11px;color:var(--g500)">webpack-dev-server 5 内置 http-proxy-middleware v2，v3 的对象写法静默失效；<code style="font-size:10px;background:var(--g100);padding:1px 4px;border-radius:3px">selfHandleResponse: true</code> 同时吞掉所有响应</td>
+        </tr>
+        <tr>
+          <td style="padding:9px 12px;font-weight:700;color:var(--amber)">3</td>
+          <td style="padding:9px 12px"><code style="font-size:10px;background:var(--blue-light);color:var(--blue);padding:1px 5px;border-radius:3px">路由顺序</code><br><span style="font-size:10px;color:var(--g400)">匹配优先级</span></td>
+          <td style="padding:9px 12px;font-size:11px;color:var(--g600)">SSE 接口被普通 JSON 代理先匹配</td>
+          <td style="padding:9px 12px;font-size:11px;color:var(--g500)">webpack 代理按从上到下首次匹配，SSE 精确路径必须写在同前缀通配规则之前</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">✅ 三管齐下解法</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="background:var(--g50);border:1px solid var(--g200);border-radius:8px;padding:12px 14px;display:flex;align-items:flex-start;gap:10px">
+        <div style="width:26px;height:26px;background:var(--green-light);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--green);flex-shrink:0">①</div>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--g800);margin-bottom:3px">全局关闭压缩</div>
+          <div style="font-size:11px;color:var(--g500)">在 <code style="background:var(--g100);padding:1px 4px;border-radius:3px">devServer</code> 层设 <code style="background:var(--amber-light);color:#854d0e;padding:1px 4px;border-radius:3px">compress: false</code>，彻底解决所有接口的 SSE 积压问题（不影响生产环境）</div>
+        </div>
+      </div>
+      <div style="background:var(--g50);border:1px solid var(--g200);border-radius:8px;padding:12px 14px;display:flex;align-items:flex-start;gap:10px">
+        <div style="width:26px;height:26px;background:var(--blue-light);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--blue);flex-shrink:0">②</div>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--g800);margin-bottom:3px">SSE 专属代理工厂 — v2 语法 + 手动 pipe</div>
+          <div style="font-size:11px;color:var(--g500);margin-bottom:8px">使用 <code style="background:var(--g100);padding:1px 4px;border-radius:3px">selfHandleResponse: true</code> + 顶层 <code style="background:var(--green-light);color:var(--green);padding:1px 4px;border-radius:3px">onProxyRes</code>（v2 语法），手动透传响应头并 pipe 原始流，零缓冲实时到达浏览器</div>
+          <div style="background:var(--g900);border-radius:6px;padding:12px;font-family:'SF Mono',Menlo,monospace;font-size:10px;color:#e5e7eb;line-height:1.8">
+            <span style="color:#9ca3af">// ⚠️ v2 顶层 onProxyRes，不是 on.proxyRes</span><br>
+            <span style="color:#60a5fa">onProxyRes</span>: (proxyRes, _req, res) =&gt; {<br>
+            &nbsp;&nbsp;Object.entries(proxyRes.headers).forEach(([k,v]) =&gt; res.<span style="color:#34d399">setHeader</span>(k, v));<br>
+            &nbsp;&nbsp;res.<span style="color:#34d399">setHeader</span>(<span style="color:#fcd34d">'X-Accel-Buffering'</span>, <span style="color:#fcd34d">'no'</span>); <span style="color:#9ca3af">// 禁用 nginx/CDN 缓冲</span><br>
+            &nbsp;&nbsp;res.<span style="color:#34d399">setHeader</span>(<span style="color:#fcd34d">'Cache-Control'</span>, <span style="color:#fcd34d">'no-cache'</span>);<br>
+            &nbsp;&nbsp;res.<span style="color:#34d399">writeHead</span>(proxyRes.statusCode ?? 200);<br>
+            &nbsp;&nbsp;proxyRes.<span style="color:#34d399">pipe</span>(res); <span style="color:#9ca3af">// 直接 pipe，零缓冲</span><br>
+            }
+          </div>
+        </div>
+      </div>
+      <div style="background:var(--g50);border:1px solid var(--g200);border-radius:8px;padding:12px 14px;display:flex;align-items:flex-start;gap:10px">
+        <div style="width:26px;height:26px;background:var(--purple-light);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--purple);flex-shrink:0">③</div>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--g800);margin-bottom:3px">路由顺序：精确路径写在通配前缀之前</div>
+          <div style="font-size:11px;color:var(--g500)">
+            <code style="background:var(--green-light);color:var(--green);padding:1px 4px;border-radius:3px">/productagent/api/message</code> → SSE 代理<br>
+            <code style="background:var(--green-light);color:var(--green);padding:1px 4px;border-radius:3px">/productagent/api/events</code> → SSE 代理<br>
+            <code style="background:var(--g100);color:var(--g600);padding:1px 4px;border-radius:3px">/productagent/api</code> → 普通 JSON 代理（通配，放最后）
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑥ UI Bridge -->
+<div class="sec" id="bridge">
+  <div class="sec-hd">
+    <div class="sec-num" style="background:var(--purple-light);color:var(--purple)">⑥</div>
+    <div class="sec-title">内嵌浏览器 UI Bridge<small>三层透传通信</small></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title">📡 通信链路</div>
+    <div style="font-size:12px;color:var(--g500);margin-bottom:16px">芥末系统（product-w）运行在 ai-iframe 内嵌的 iframe 中，通过 <code style="background:var(--g100);padding:1px 5px;border-radius:3px">source: 'jiemo-iframe-ui-bridge'</code> 协议进行三层透传</div>
+    <div class="bridge">
+      <div class="bn" style="background:#fdf2f8;border:1px solid #f9a8d4"><div class="bn-t" style="color:#be185d">product-w</div><div class="bn-s">最内层 iframe</div></div>
+      <div class="ba">→<div class="ba-lbl">postMessage</div></div>
+      <div class="bn" style="background:var(--blue-light);border:1px solid #bfdbfe"><div class="bn-t" style="color:var(--blue)">ai-iframe</div><div class="bn-s">中继层</div></div>
+      <div class="ba">→<div class="ba-lbl">window.parent.postMessage</div></div>
+      <div class="bn" style="background:#fef9c3;border:1px solid #fde047"><div class="bn-t" style="color:#854d0e">pc-w</div><div class="bn-s">渲染 Modal/Toast</div></div>
+      <div class="ba">→<div class="ba-lbl" style="background:#dcfce7;color:#166534">:result + requestId</div></div>
+      <div class="bn" style="background:var(--blue-light);border:1px solid #bfdbfe"><div class="bn-t" style="color:var(--blue)">ai-iframe</div><div class="bn-s">中继回写</div></div>
+      <div class="ba">→<div class="ba-lbl">contentWindow.postMessage</div></div>
+      <div class="bn" style="background:#fdf2f8;border:1px solid #f9a8d4"><div class="bn-t" style="color:#be185d">product-w</div><div class="bn-s">resolve Promise</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📋 消息协议</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr>
+        <th style="text-align:left;padding:8px 12px;background:var(--g50);border-bottom:1px solid var(--g200);font-size:11px;color:var(--g500)">消息类型</th>
+        <th style="text-align:left;padding:8px 12px;background:var(--g50);border-bottom:1px solid var(--g200);font-size:11px;color:var(--g500)">需要回写</th>
+        <th style="text-align:left;padding:8px 12px;background:var(--g50);border-bottom:1px solid var(--g200);font-size:11px;color:var(--g500)">说明</th>
+      </tr></thead>
+      <tbody>
+        <tr><td style="padding:9px 12px;border-bottom:1px solid var(--g100)"><code style="font-size:10px;background:var(--blue-light);color:var(--blue);padding:1px 5px;border-radius:3px">ui:confirm</code></td><td style="padding:9px 12px;border-bottom:1px solid var(--g100)"><span style="color:var(--green)">✅</span> <code style="font-size:10px;background:var(--green-light);color:var(--green);padding:1px 4px;border-radius:3px">ui:confirm:result</code></td><td style="padding:9px 12px;border-bottom:1px solid var(--g100);color:var(--g500)">确认/取消弹窗</td></tr>
+        <tr><td style="padding:9px 12px;border-bottom:1px solid var(--g100)"><code style="font-size:10px;background:var(--blue-light);color:var(--blue);padding:1px 5px;border-radius:3px">ui:alert</code></td><td style="padding:9px 12px;border-bottom:1px solid var(--g100)"><span style="color:var(--green)">✅</span> <code style="font-size:10px;background:var(--green-light);color:var(--green);padding:1px 4px;border-radius:3px">ui:alert:result</code></td><td style="padding:9px 12px;border-bottom:1px solid var(--g100);color:var(--g500)">单确认弹窗</td></tr>
+        <tr><td style="padding:9px 12px"><code style="font-size:10px;background:var(--blue-light);color:var(--blue);padding:1px 5px;border-radius:3px">ui:toast</code></td><td style="padding:9px 12px"><span style="color:var(--g400)">❌</span> 无需回调</td><td style="padding:9px 12px;color:var(--g500)">轻提示，无需回调</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ⑦ 会话隔离 -->
+<div class="sec" id="isolation">
+  <div class="sec-hd">
+    <div class="sec-num" style="background:var(--red-light);color:var(--red)">⑦</div>
+    <div class="sec-title">跨会话隔离三层防御体系</div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div style="font-size:12px;color:var(--g500);margin-bottom:14px">用户快速切换会话时，旧会话 SSE 消息可能延迟到达并污染新会话 UI，通过三层防御确保数据隔离。</div>
+  </div>
+  <div class="def">
+    <div class="def-num" style="background:var(--red-light);color:var(--red)">1</div>
+    <div>
+      <div class="def-title">主动中断</div>
+      <div class="def-desc">触发时机：<code style="background:var(--g100);padding:1px 5px;border-radius:3px">clearSession()</code> 调用时</div>
+      <div class="def-code">_currentFetchAbortController.abort() → 立即切断旧 SSE fetch 连接</div>
+    </div>
+  </div>
+  <div class="def">
+    <div class="def-num" style="background:var(--amber-light);color:var(--amber)">2</div>
+    <div>
+      <div class="def-title">事件 Guard</div>
+      <div class="def-desc">触发时机：收到 <code style="background:var(--g100);padding:1px 5px;border-radius:3px">message.start</code> 事件时</div>
+      <div class="def-code">校验 sessionId 是否与 currentSessionId$ 匹配，不匹配则丢弃整条消息流</div>
+    </div>
+  </div>
+  <div class="def">
+    <div class="def-num" style="background:var(--green-light);color:var(--green)">3</div>
+    <div>
+      <div class="def-title">状态清零</div>
+      <div class="def-desc">触发时机：<code style="background:var(--g100);padding:1px 5px;border-radius:3px">clearSession()</code> 调用时</div>
+      <div class="def-code">重置 10+ 项跨会话敏感状态（消息流、排队链、重连计数、终结事件标志等）</div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px;background:var(--g50)">
+    <div style="font-size:12px;color:var(--g600)">💡 QueuePanel 的「中断并发送」/「撤销」操作还在渲染时<strong>快照 sessionId</strong> 到闭包中，防止切换会话竞态时操作作用于错误会话。</div>
+  </div>
+</div>
+
+<!-- ⑧ 断点续传 -->
+<div class="sec" id="resume">
+  <div class="sec-hd">
+    <div class="sec-num" style="background:var(--green-light);color:var(--green)">⑧</div>
+    <div class="sec-title">断点续传机制<small>message.resume</small></div>
+  </div>
+  <div class="card">
+    <div style="font-size:12px;color:var(--g500);margin-bottom:16px">用户刷新页面或网络中断后，AI 已生成到一半的回复可以无缝续接。</div>
+    <div class="flow">
+      <div class="fstep">
+        <div class="fline"><div class="fdot" style="background:var(--blue)"></div><div class="fconn"></div></div>
+        <div class="fcnt"><div class="ft">fetchChatHistoryWithResume(sessionId)</div><div class="fd">后端返回历史消息 + 未完成消息携带的 resumeToken</div></div>
+      </div>
+      <div class="fstep">
+        <div class="fline"><div class="fdot" style="background:var(--purple)"></div><div class="fconn"></div></div>
+        <div class="fcnt"><div class="ft">ChatService 检测到 resumeToken</div><div class="fd">调用 resumeMessageFromQueue(sessionId, resumeQid, userParts)</div></div>
+      </div>
+      <div class="fstep">
+        <div class="fline"><div class="fdot" style="background:var(--amber)"></div><div class="fconn"></div></div>
+        <div class="fcnt"><div class="ft">SSE 推送 message.resume 事件</div><div class="fd">将历史 blocks 注入 currentMessageStream$，重建渲染状态</div></div>
+      </div>
+      <div class="fstep">
+        <div class="fline"><div class="fdot" style="background:var(--green)"></div></div>
+        <div class="fcnt"><div class="ft">后续 block 事件追加到已恢复的流中</div><div class="fd">用户看到无缝续接的消息内容</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑨ 表格双向链路 -->
+<div class="sec" id="table">
+  <div class="sec-hd">
+    <div class="sec-num" style="background:#fdf2f8;color:#ec4899">⑨</div>
+    <div class="sec-title">可编辑表格双向数据链路</div>
+  </div>
+  <div class="card">
+    <div style="font-size:12px;color:var(--g500);margin-bottom:16px">完整闭环：AI 推送表格数据 → 前端展示 → 用户编辑 → 提交 → AI 继续建档。</div>
+    <div class="flow">
+      <div class="fstep"><div class="fline"><div class="fdot" style="background:#ec4899"></div><div class="fconn"></div></div><div class="fcnt"><div class="ft">SSE block (modify_excel_card)</div><div class="fd">blockRenderer 渲染摘要卡片（ModifyExcelCardSummary）</div></div></div>
+      <div class="fstep"><div class="fline"><div class="fdot" style="background:var(--purple)"></div><div class="fconn"></div></div><div class="fcnt"><div class="ft">点击"展开"触发 pushResultToDialogue()</div><div class="fd">setDialogueTableData() + setDialogueOpenSignal++ → Dialogue 侧栏展开</div></div></div>
+      <div class="fstep"><div class="fline"><div class="fdot" style="background:var(--blue)"></div><div class="fconn"></div></div><div class="fcnt"><div class="ft">用户在 EditableTable 编辑字段</div><div class="fd">单元格点击即可编辑；低置信度黄色高亮，无效值红色高亮 + Tooltip</div></div></div>
+      <div class="fstep"><div class="fline"><div class="fdot" style="background:var(--amber)"></div><div class="fconn"></div></div><div class="fcnt"><div class="ft">点击提交 → POST /api/table/export</div><div class="fd">后端生成 Excel，返回 S3 URL</div></div></div>
+      <div class="fstep"><div class="fline"><div class="fdot" style="background:var(--green)"></div></div><div class="fcnt"><div class="ft">chatService.sendMessage(submitPrompt, sessionId, [{url: s3Url}])</div><div class="fd">AI 收到 Excel 后继续建档流程（完整闭环）</div></div></div>
+    </div>
+    <div style="background:var(--g50);border-radius:7px;padding:11px 13px;margin-top:12px;font-size:12px;color:var(--g600)">
+      💡 <strong>切换会话自动清理</strong>：currentSessionId$ 变化时触发 dialogueCloseSignal++，收起侧栏并清空 dialogueTableData，防止旧会话数据残留
+    </div>
+  </div>
+</div>
+
+<!-- ⑩ 状态管理 -->
+<div class="sec" id="state">
+  <div class="sec-hd">
+    <div class="sec-num" style="background:var(--blue-light);color:var(--blue)">⑩</div>
+    <div class="sec-title">RSJS 状态管理架构</div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title">🏛️ Service 职责划分</div>
+    <table class="stbl">
+      <thead><tr>
+        <th>Service</th><th>注册层级</th><th>职责</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="sn" style="background:#dcfce7;color:#166534">GlobalEventService</span></td>
+          <td><span style="font-size:11px;color:var(--g500)">agent/index.tsx（顶层）</span></td>
+          <td class="def-desc">全局 SSE 连接（/api/events），下发 task/session/queue/kicked/message.add 事件；Agent 切换不断开</td>
+        </tr>
+        <tr>
+          <td><span class="sn" style="background:#dbeafe;color:#1e40af">ChatService</span></td>
+          <td><span style="font-size:11px;color:var(--g500)">bindServices（随 Agent）</span></td>
+          <td class="def-desc">消息流管理、SSE 发送/取消/排队、历史加载、断点续传、会话隔离</td>
+        </tr>
+        <tr>
+          <td><span class="sn" style="background:#fce7f3;color:#9d174d">SessionService</span></td>
+          <td><span style="font-size:11px;color:var(--g500)">bindServices（随 Agent）</span></td>
+          <td class="def-desc">会话列表增删查，会话状态/标题同步</td>
+        </tr>
+        <tr>
+          <td><span class="sn" style="background:#fef9c3;color:#854d0e">TaskService</span></td>
+          <td><span style="font-size:11px;color:var(--g500)">bindServices（随 Agent）</span></td>
+          <td class="def-desc">任务列表分页加载，任务数据更新</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔀 页面双层组件模式</div>
+    <div style="font-size:12px;color:var(--g500);margin-bottom:12px">规避 bindServices 类型推断限制，外层注册容器，内层消费 Service</div>
+    <div style="background:var(--g900);border-radius:8px;padding:16px;font-family:'SF Mono',Menlo,monospace;font-size:11px;color:#e5e7eb;line-height:1.8">
+      <span style="color:#9ca3af">// 外层：注册 Service 容器</span><br>
+      <span style="color:#60a5fa">const</span> SkuAgentPage = <span style="color:#34d399">bindServices</span>(SkuAgentContent, [ChatService, SessionService, TaskService]);<br><br>
+      <span style="color:#9ca3af">// 内层：observer 包裹，直接读取响应式属性（$ 结尾）</span><br>
+      <span style="color:#60a5fa">const</span> SkuAgentContent = <span style="color:#34d399">observer</span>(({ agentType, globalEventService }) =&gt; {<br>
+      &nbsp;&nbsp;<span style="color:#60a5fa">const</span> chatService = <span style="color:#34d399">useService</span>(ChatService);<br>
+      &nbsp;&nbsp;<span style="color:#9ca3af">// chatService.currentSessionId$ 变化时组件自动重渲染</span><br>
+      });
+    </div>
+  </div>
+</div>
+
+<!-- ⑪ 消息排队 -->
+<div class="sec" id="queue">
+  <div class="sec-hd">
+    <div class="sec-num" style="background:var(--amber-light);color:var(--amber)">⑪</div>
+    <div class="sec-title">消息排队管理<small>QueuePanel</small></div>
+  </div>
+  <div class="card">
+    <div style="font-size:12px;color:var(--g500);margin-bottom:14px">用户可在 AI 还未回复时连续发送消息，多条消息有序排队等待处理。</div>
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <div style="background:var(--g50);border:1px solid var(--g200);border-radius:8px;padding:12px;display:flex;align-items:flex-start;gap:10px">
+        <div style="width:28px;height:28px;background:var(--red-light);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">⏹️</div>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--g800)">取消</div>
+          <div style="font-size:11px;color:var(--g500);margin-top:2px">调用 <code style="background:var(--g100);padding:1px 4px;border-radius:3px">cancelMessage(qid)</code>；若取消的是当前响应中的消息，需先 clearCurrentStream() 将停止按钮切回发送状态</div>
+        </div>
+      </div>
+      <div style="background:var(--g50);border:1px solid var(--g200);border-radius:8px;padding:12px;display:flex;align-items:flex-start;gap:10px">
+        <div style="width:28px;height:28px;background:var(--amber-light);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">⚡</div>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--g800)">中断并发送</div>
+          <div style="font-size:11px;color:var(--g500);margin-top:2px">需在 <code style="background:var(--g100);padding:1px 4px;border-radius:3px">outboundPendingUserMessage$</code> 中预存用户消息（保证聊天区立即显示气泡），再调用 sendMessage 携带 queueQid</div>
+        </div>
+      </div>
+      <div style="background:var(--g50);border:1px solid var(--g200);border-radius:8px;padding:12px;display:flex;align-items:flex-start;gap:10px">
+        <div style="width:28px;height:28px;background:var(--blue-light);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">🗑️</div>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--g800)">撤销排队消息</div>
+          <div style="font-size:11px;color:var(--g500);margin-top:2px">删除队列中尚未开始处理的消息，不影响当前正在响应的消息</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑫ 文件上传 -->
+<div class="sec" id="upload">
+  <div class="sec-hd">
+    <div class="sec-num" style="background:var(--green-light);color:var(--green)">⑫</div>
+    <div class="sec-title">文件上传<small>McS3Upload 封装</small></div>
+  </div>
+  <div class="card">
+    <div class="g2">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--g700);margin-bottom:12px">用户主动上传（聊天输入框）</div>
+        <div class="flow">
+          <div class="fstep"><div class="fline"><div class="fdot" style="background:var(--blue)"></div><div class="fconn"></div></div><div class="fcnt"><div class="ft">用户拖拽/点击上传</div><div class="fd">支持 Excel、图片格式</div></div></div>
+          <div class="fstep"><div class="fline"><div class="fdot" style="background:var(--green)"></div><div class="fconn"></div></div><div class="fcnt"><div class="ft">McS3Upload → uploadFileToS3()</div><div class="fd">返回 UploadedFileInfo { url, name, mimeType, size }</div></div></div>
+          <div class="fstep"><div class="fline"><div class="fdot" style="background:var(--amber)"></div></div><div class="fcnt"><div class="ft">chatService.sendMessage(text, sessionId, files)</div><div class="fd">文件与消息文本一起发给 AI</div></div></div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--g700);margin-bottom:12px">表格提交（Dialogue 侧栏）</div>
+        <div class="flow">
+          <div class="fstep"><div class="fline"><div class="fdot" style="background:#ec4899"></div><div class="fconn"></div></div><div class="fcnt"><div class="ft">用户点击"提交"</div><div class="fd">不经过 McS3Upload 上传流程</div></div></div>
+          <div class="fstep"><div class="fline"><div class="fdot" style="background:var(--purple)"></div><div class="fconn"></div></div><div class="fcnt"><div class="ft">POST /api/table/export</div><div class="fd">后端生成 Excel → 返回 S3 URL</div></div></div>
+          <div class="fstep"><div class="fline"><div class="fdot" style="background:var(--green)"></div></div><div class="fcnt"><div class="ft">chatService.sendMessage 携带 S3 URL</div><div class="fd">AI 收到 Excel 继续建档（闭环）</div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑬ 完整数据流 -->
+<div class="sec" id="flow">
+  <div class="sec-hd">
+    <div class="sec-num" style="background:var(--g800);color:#fff">⑬</div>
+    <div class="sec-title">完整数据流转图</div>
+  </div>
+  <div class="dfdk">
+    <div class="dfph">
+      <div class="dfph-t">用户输入</div>
+      <div class="dfit-list">
+        <div class="dfit"><span>用户输入文字 / 拖拽上传文件</span> <span class="df-arrow">→</span> <code style="color:#6ee7b7">ChatArea 输入框</code> <span class="df-arrow">→</span> <code style="color:#93c5fd">chatService.sendMessage(content, sessionId, files?)</code></div>
+        <div class="dfit"><code style="color:#f9a8d4">POST /api/send</code><span>→ 返回 queueItem(qid)</span></div>
+      </div>
+    </div>
+    <div class="dfph">
+      <div class="dfph-t">全局 SSE 事件（GlobalEventService 常驻，Agent 切换不断开）</div>
+      <div class="dfit-list">
+        <div class="dfit"><code style="color:#6ee7b7">task.updated</code><span>→ TaskService 更新任务列表</span></div>
+        <div class="dfit"><code style="color:#93c5fd">session.updated</code><span>→ SessionService + ChatService 更新会话状态/标题</span></div>
+        <div class="dfit"><code style="color:#fcd34d">queue.updated</code><span>→ ChatService.queue$ 更新 QueuePanel</span></div>
+        <div class="dfit"><code style="color:#fca5a5">kicked</code><span>→ 弹出异地登录提示弹窗</span></div>
+        <div class="dfit"><code style="color:#c4b5fd">message.add</code><span>→ 触发加载对应消息的 SSE 流</span></div>
+      </div>
+    </div>
+    <div class="dfph">
+      <div class="dfph-t">消息 SSE 流（ChatService 按消息建立独立连接）</div>
+      <div class="dfit-list">
+        <div class="dfit"><code style="color:#60a5fa">message.start</code><span>初始化消息流（sessionId 守卫）</span></div>
+        <div class="dfit"><code style="color:#60a5fa">block</code><span>新增 block（整体替换 stream 触发重渲染）</span></div>
+        <div class="dfit"><code style="color:#60a5fa">block.append</code><span>追加内容到已有 block</span></div>
+        <div class="dfit"><code style="color:#60a5fa">block.delta</code><span>Markdown 增量更新</span></div>
+        <div class="dfit"><code style="color:#60a5fa">message.replace</code><span>整体替换消息流</span></div>
+        <div class="dfit"><code style="color:#60a5fa">message.resume</code><span>断点续传，恢复历史 blocks</span></div>
+        <div class="dfit"><code style="color:#60a5fa">message.done</code><span>消息结束</span></div>
+      </div>
+    </div>
+    <div class="dfph">
+      <div class="dfph-t">Block 渲染器映射</div>
+      <div class="dfit-list">
+        <div class="dfit"><code style="color:#6ee7b7">markdown</code><span>MarkdownRenderer（支持 GFM）</span></div>
+        <div class="dfit"><code style="color:#93c5fd">thinking</code><span>ThinkingBlock（可折叠）</span></div>
+        <div class="dfit"><code style="color:#fcd34d">process_card</code><span>ProgressCard（步骤可视化）</span></div>
+        <div class="dfit"><code style="color:#c4b5fd">fold_process_card</code><span>FoldProcessCard（折叠摘要）</span></div>
+        <div class="dfit"><code style="color:#f9a8d4">result_card</code><span>ResultCard（多 block 容器）</span></div>
+        <div class="dfit"><code style="color:#fca5a5">jiemo_link</code><span>JiemoLink（内嵌浏览器打开）</span></div>
+        <div class="dfit"><code style="color:#86efac">modify_excel_card</code><span>ModifyExcelCardSummary → 展开 Dialogue 侧栏</span></div>
+      </div>
+    </div>
+    <div class="dfph" style="margin-bottom:0">
+      <div class="dfph-t">Dialogue 侧栏提交闭环</div>
+      <div class="dfit-list">
+        <div class="dfit"><span>用户修改 EditableTable + 点击提交</span> <span class="df-arrow">→</span> <code style="color:#f9a8d4">POST /api/table/export</code> <span class="df-arrow">→</span> <code style="color:#86efac">S3 URL</code> <span class="df-arrow">→</span> <code style="color:#93c5fd">chatService.sendMessage</code> <span class="df-arrow">→</span> <span>AI 收到 Excel 继续建档（完整闭环）</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑭ 文档索引 -->
+<div class="sec" id="docs">
+  <div class="sec-hd">
+    <div class="sec-num" style="background:var(--g100);color:var(--g600)">⑭</div>
+    <div class="sec-title">详细技术文档索引</div>
+  </div>
+  <div class="doc-grid">
+    <div class="doc">
+      <div class="doc-ic" style="background:#eff6ff">📁</div>
+      <div><div class="doc-name">tech/MODULES.md</div><div class="doc-desc">目录结构与模块职责划分</div></div>
+    </div>
+    <div class="doc">
+      <div class="doc-ic" style="background:#f0fdf4">🧩</div>
+      <div><div class="doc-name">tech/COMPONENTS.md</div><div class="doc-desc">组件分类、Props 规范、Keeta Design PC 使用规范</div></div>
+    </div>
+    <div class="doc">
+      <div class="doc-ic" style="background:#fefce8">⚡</div>
+      <div><div class="doc-name">tech/SSE_IMPLEMENTATION.md</div><div class="doc-desc">SSE 连接管理、事件分发、断点续传、会话隔离防御体系</div></div>
+    </div>
+    <div class="doc">
+      <div class="doc-ic" style="background:var(--blue-light)">🏛️</div>
+      <div><div class="doc-name">tech/STATE_MANAGEMENT.md</div><div class="doc-desc">RSJS Service 设计模式、响应式属性、依赖注入</div></div>
+    </div>
+    <div class="doc">
+      <div class="doc-ic" style="background:var(--purple-light)">📡</div>
+      <div><div class="doc-name">tech/API_INTERFACE.md</div><div class="doc-desc">HTTP 接口与 SSE 事件流详细规范</div></div>
+    </div>
+    <div class="doc">
+      <div class="doc-ic" style="background:#fdf2f8">📋</div>
+      <div><div class="doc-name">NEW_AGENT_SOP.md</div><div class="doc-desc">新 Agent 开发标准操作流程（复用矩阵、步骤、骨架代码）</div></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /content -->
+</div><!-- /main -->
+</div><!-- /wrap -->
+
+<script>
+  // Active nav highlight on scroll
+  const sections = document.querySelectorAll('.sec[id]');
+  const navLinks = document.querySelectorAll('a.nav-a');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(a => a.classList.remove('active'));
+        const active = document.querySelector(`a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+
+
+</body></html>
